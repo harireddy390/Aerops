@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink text-slate-100 antialiased;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-image:
+    radial-gradient(1100px 480px at 15% -8%, rgba(99, 102, 241, 0.16), transparent 60%),
+    radial-gradient(900px 420px at 90% 0%, rgba(34, 211, 238, 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* ---------- surfaces ---------- */
+.card {
+  @apply rounded-2xl border border-line bg-panel/90 p-4 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.7)];
+}
+.card-h {
+  @apply mb-3 flex items-center justify-between;
+}
+.card-t {
+  @apply text-sm font-semibold tracking-wide text-slate-200;
+}
+
+/* ---------- controls ---------- */
+.btn {
+  @apply inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+}
+.btn-ghost {
+  @apply inline-flex items-center gap-1.5 rounded-xl border border-line px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-500/60 hover:bg-white/5 active:scale-[0.98];
+}
+.btn-danger {
+  @apply inline-flex items-center gap-1.5 rounded-xl bg-red-600/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 active:scale-[0.98];
+}
+.input,
+select.input {
+  @apply w-full rounded-xl border border-line bg-[#0a0f22] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-indigo-500/70 focus:ring-2 focus:ring-indigo-500/20;
+}
+
+/* ---------- data ---------- */
+.tbl {
+  @apply w-full border-collapse;
+}
+.tbl th {
+  @apply pb-2 pr-3 text-left text-[11px] font-semibold uppercase tracking-wider text-mut;
+}
+.tbl td {
+  @apply border-t border-line/70 py-2.5 pr-3 align-top text-sm;
+}
+.tbl tbody tr {
+  @apply transition hover:bg-white/[0.03];
+}
+.logbox {
+  @apply overflow-auto whitespace-pre-wrap rounded-xl border border-line bg-black/60 p-3 font-mono text-xs leading-relaxed text-green-400;
+  max-height: 320px;
+}
+.logbox::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.logbox::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  @apply rounded bg-line;
+}
+
+/* ---------- badges & dots ---------- */
+.badge {
+  @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-white/[0.04] px-2.5 py-0.5 text-xs font-semibold;
+}
+.dot {
+  @apply inline-block h-2 w-2 rounded-full;
+}
+.dot-pulse {
+  animation: dotpulse 1.6s ease-in-out infinite;
+}
+@keyframes dotpulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- misc ---------- */
+.stat-v {
+  @apply mt-1 text-3xl font-bold tracking-tight;
+}
+.page-h {
+  @apply mb-1 text-2xl font-bold tracking-tight;
+}
+.page-sub {
+  @apply mb-5 text-sm text-mut;
+}
+.spin {
+  @apply inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-indigo-400;
+}
+.fade-in {
+  animation: fadein 0.25s ease-out;
+}
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}

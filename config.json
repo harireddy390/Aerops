@@ -1,0 +1,14 @@
+{
+  "port": 3000,
+  "restartDelayMs": 2000,
+  "maxRestarts": 20,
+  "healthCheckIntervalMs": 15000,
+  "logFile": "monitor.log",
+  "dbFile": "aeroops.db",
+  "stateFile": "state.json",
+  "crashLogFile": "crashes.jsonl",
+  "alertWebhook": "",
+  "ollamaModel": "qwen2.5-coder:7b",
+  "ollamaHost": "http://localhost:11434",
+  "autoFix": false
+}

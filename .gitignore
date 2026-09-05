@@ -1,0 +1,16 @@
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.venv/
+*.db
+*.log
+state.json
+crashes.jsonl
+server.js.bak-*
+.env
+dist/
+__pycache__/
+*.py[cod]
+
+*.db-shm
+*.db-wal

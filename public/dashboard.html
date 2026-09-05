@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AeroOps · Ops Console</title>
+<style>
+:root{--bg:#0b1020;--panel:#141b33;--line:#243055;--txt:#e8ecf8;--mut:#8b96b8;--ok:#22c55e;--bad:#ef4444;--acc:#6366f1}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#1b2450,var(--bg));color:var(--txt);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:28px 18px 60px}
+header{display:flex;align-items:center;gap:12px}.pulse{width:12px;height:12px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);animation:p 2s infinite}@keyframes p{50%{opacity:.4}}
+h1{font-size:22px;margin:0}sub{color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}.card small{color:var(--mut)}.card h2{margin:4px 0 0;font-size:28px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600}button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}button.danger{background:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.ai{white-space:pre-wrap;background:#0a0f22;border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px;max-height:160px;overflow:auto;color:#c7d2fe}
+pre#logs{background:#050816;border:1px solid var(--line);border-radius:12px;padding:12px;max-height:260px;overflow:auto;color:#4ade80;font-size:12px}
+#fixMsg{color:#c7d2fe;font-size:13px;margin-top:8px}
+footer{color:var(--mut);font-size:12px;margin-top:18px}
+</style></head><body><div class="wrap">
+<header><div class="pulse" id="dot"></div><div><h1>AeroOps · Ops Console</h1><sub>monitor + local-AI diagnosis + self-heal</sub></div></header>
+<div class="grid">
+<div class="card"><small>Status</small><h2 id="status">…</h2><small id="uptime"></small></div>
+<div class="card"><small>Restarts</small><h2 id="restarts">…</h2><small>crashes: <span id="crashCount">…</span></small></div>
+<div class="card"><small>Auto-fix</small><h2 id="autofix">…</h2><small id="model"></small></div>
+<div class="card"><small>Version</small><h2 id="ver">…</h2><small id="time"></small></div>
+</div>
+<div class="row">
+<button class="danger" onclick="triggerCrash()">Trigger test crash</button>
+<button onclick="applyFix()">Apply auto-fix</button>
+<button class="ghost" onclick="refresh()">Refresh</button>
+</div>
+<div id="fixMsg"></div>
+<h3>Recent crashes (with AI diagnosis)</h3>
+<table><thead><tr><th>Time</th><th>Exit</th><th>Diagnosis</th></tr></thead><tbody id="crashes"></tbody></table>
+<h3>Monitor log</h3><pre id="logs"></pre>
+<footer>Endpoints: <code>/health</code> · <code>/api/status</code> · <code>/api/logs</code> · <code>POST /api/diagnose</code> · <code>POST /api/fix</code> · <code>/crash</code></footer>
+</div>
+<script>
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+async function refresh(){
+  try{
+    const s = await (await fetch('/api/status')).json();
+    document.getElementById('status').textContent = s.status;
+    document.getElementById('dot').style.background = s.status==='ok'?'var(--ok)':'var(--bad)';
+    document.getElementById('uptime').textContent = 'uptime ' + s.uptimeSec + 's';
+    document.getElementById('restarts').textContent = s.restarts;
+    document.getElementById('crashCount').textContent = s.crashes.length;
+    document.getElementById('autofix').textContent = s.autoFix ? 'ON' : 'OFF';
+    document.getElementById('model').textContent = s.model || '';
+    document.getElementById('ver').textContent = 'v' + (s.version || '');
+    document.getElementById('time').textContent = s.time || '';
+    document.getElementById('crashes').innerHTML = s.crashes.slice().reverse().map(c=>{
+      const d = c.diagnosis||{};
+      return `<tr><td>${esc(c.time)}</td><td>${esc(c.code)}</td><td><b>${esc(d.cause||'')}</b><br><small>${esc(d.fix||'')}</small>${d.ai?`<div class="ai">${esc(d.ai)}</div>`:''}</td></tr>`;
+    }).join('') || '<tr><td colspan=3>No crashes yet — hit “Trigger test crash”.</td></tr>';
+    const l = await (await fetch('/api/logs')).json();
+    document.getElementById('logs').textContent = l.lines.join('\n');
+  }catch(e){ document.getElementById('status').textContent = 'down'; }
+}
+async function triggerCrash(){ await fetch('/crash'); document.getElementById('fixMsg').textContent = 'Crash triggered — auto-restart + AI diagnosis in ~20s, refreshing…'; setTimeout(refresh, 6000); setTimeout(refresh, 20000); }
+async function applyFix(){ const r = await (await fetch('/api/fix',{method:'POST'})).json(); document.getElementById('fixMsg').textContent = JSON.stringify(r); refresh(); }
+refresh(); setInterval(refresh, 5000);
+</script></body></html>

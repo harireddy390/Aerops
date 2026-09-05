@@ -1,0 +1,18 @@
+{
+  "name": "aeroops-backend",
+  "version": "1.2.0",
+  "description": "AeroOps real service: SQLite + Express backend + React frontend + local-AI self-healing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node monitor.js",
+    "server": "node server.js",
+    "dev": "npm --prefix frontend run dev",
+    "install:all": "npm install && npm --prefix frontend install",
+    "test": "node test/api.test.js",
+    "diagnose": "node -e \"require('./lib/diagnose').diagnose(process.argv[1]||'test crash').then(r=>console.log(JSON.stringify(r,null,2)))\"",
+    "fix": "node -e \"console.log(require('./lib/fix').autoFix(require('path').join(__dirname,'server.js')))\""
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

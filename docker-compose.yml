@@ -1,0 +1,34 @@
+# AeroOps platform (Python FastAPI + React TS). Legacy Node MVP still at :3000 via npm start.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=sqlite:///./aeroops.db
+      - OLLAMA_ENABLED=false
+      - SEED_DEMOS=false
+      - CORS_ORIGINS=http://localhost:5173
+    volumes:
+      - ./backend/aeroops.db:/srv/aeroops.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    # If you add Postgres later:
+    # db:
+    #   image: postgres:16-alpine
+    #   environment:
+    #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+    #   volumes:
+    #     - pgdata:/var/lib/postgresql/data
+# volumes:
+#   pgdata:
