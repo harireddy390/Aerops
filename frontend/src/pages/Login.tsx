@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Zap } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 
@@ -41,8 +42,26 @@ export function Login() {
         setFirst(!!s.first_user)
         if (s.registration_open && s.first_user) setTab('signup')
       })
-      .catch(() => setOpen(false))
+      // server is the source of truth on submit: assume open so a blip
+      // never dead-ends the form (a truly closed server still says no cleanly)
+      .catch(() => setOpen(true))
   }, [])
+
+  const pickTab = (t: Tab) => {
+    setTab(t)
+    setErr('')
+    setOk('')
+    // re-check on every visit to the signup tab — never show a stale verdict
+    if (t === 'signup') {
+      fetch(`${BASE}/api/auth/status`)
+        .then((r) => r.json())
+        .then((s) => {
+          setOpen(!!s.registration_open)
+          setFirst(!!s.first_user)
+        })
+        .catch(() => setOpen(true))
+    }
+  }
 
   useEffect(() => {
     if (session) nav('/')
@@ -110,26 +129,28 @@ export function Login() {
   ]
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-line bg-panel/90 shadow-2xl md:grid-cols-2">
-        <div className="hidden flex-col justify-between bg-gradient-to-br from-indigo-600 via-violet-700 to-[#0b1020] p-8 md:flex">
+    <div className="flex min-h-screen items-center justify-center bg-soft p-6">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-xl border border-line bg-white shadow-pop md:grid-cols-2">
+        <div className="hidden flex-col justify-between bg-brand p-8 text-white md:flex">
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-base font-black">A</span>
-            <b>AeroOps</b>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20">
+              <Zap size={18} />
+            </span>
+            <b className="text-[17px]">AeroOps</b>
           </div>
           <div>
             <h1 className="text-3xl font-bold leading-tight">Every crash,<br />caught & fixed.</h1>
-            <p className="mt-3 text-sm text-indigo-100/80">Detect → diagnose → restart → verify → notify. Watch it happen live.</p>
+            <p className="mt-3 text-sm text-blue-100">Detect → diagnose → restart → verify → notify. Watch it happen live.</p>
           </div>
-          <div className="text-xs text-indigo-100/60">Self-healing operations console</div>
+          <div className="text-xs text-blue-100/80">Self-healing operations console</div>
         </div>
         <div className="p-8">
-          <div className="mb-5 flex rounded-xl border border-line bg-black/30 p-1 text-sm">
+          <div className="mb-5 flex rounded-lg border border-line bg-soft p-1 text-sm">
             {tabs.map(([t, label]) => (
               <button
                 key={t}
-                onClick={() => { setTab(t); setErr(''); setOk('') }}
-                className={`flex-1 rounded-lg px-3 py-1.5 font-medium transition ${tab === t ? 'bg-indigo-600 text-white' : 'text-mut hover:text-slate-200'}`}
+                onClick={() => pickTab(t)}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium transition ${tab === t ? 'bg-white font-semibold text-ink shadow-card' : 'text-mut hover:text-ink'}`}
               >
                 {label}
               </button>
@@ -138,7 +159,7 @@ export function Login() {
 
           {tab !== 'forgot' && (
             <>
-              <h2 className="text-xl font-bold">{tab === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
+              <h2 className="text-xl font-bold text-ink">{tab === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
               <p className="mb-4 mt-1 text-sm text-mut">
                 {open === true && first && 'No users yet — your account becomes the admin.'}
                 {open === true && !first && 'Create a viewer account — an admin can promote you to operator later.'}
@@ -157,7 +178,7 @@ export function Login() {
                 <Field label={tab === 'signup' ? 'Password (8+ characters)' : 'Password'}>
                   <div className="relative">
                     <input className="input pr-16" type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={tab === 'signin' ? 'current-password' : 'new-password'} />
-                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs text-indigo-300 hover:bg-white/5" onClick={() => setShow(!show)}>
+                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-brand hover:bg-brand-light" onClick={() => setShow(!show)}>
                       {show ? 'Hide' : 'Show'}
                     </button>
                   </div>
@@ -165,23 +186,23 @@ export function Login() {
                 {tab === 'signup' && (
                   <Field label="Confirm password">
                     <input
-                      className={`input ${confirm && (password !== confirm ? '!border-red-500/60' : '!border-emerald-500/60')}`}
+                      className={`input ${confirm && (password !== confirm ? '!border-[#FECACA] !bg-[#FEF2F2]' : '!border-[#BBF7D0] !bg-[#F0FDF4]')}`}
                       type={show ? 'text' : 'password'}
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                       autoComplete="new-password"
                     />
-                    {confirm && password !== confirm && <div className="mt-1 text-xs text-red-300">Not matching yet…</div>}
+                    {confirm && password !== confirm && <div className="mt-1 text-xs text-[#DC2626]">Not matching yet…</div>}
                   </Field>
                 )}
                 {tab === 'signin' && (
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-mut">
-                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-indigo-600" />
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[#2563EB]" />
                     Keep me logged in for 30 days
                   </label>
                 )}
               </div>
-              {err && <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{err}</div>}
+              {err && <div className="mt-3 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm text-[#B91C1C]">{err}</div>}
               <button className="btn mt-4 w-full justify-center" disabled={busy || (tab === 'signup' && open === false)} onClick={tab === 'signin' ? doSignin : doSignup}>
                 {busy ? 'One moment…' : tab === 'signin' ? 'Sign in' : 'Sign up'}
               </button>
@@ -190,7 +211,7 @@ export function Login() {
 
           {tab === 'forgot' && (
             <>
-              <h2 className="text-xl font-bold">Reset password</h2>
+              <h2 className="text-xl font-bold text-ink">Reset password</h2>
               <p className="mb-4 mt-1 text-sm text-mut">We’ll email a 6-digit code to the Gmail on your account. It works once, for 15 minutes.</p>
               <div className="space-y-3">
                 <Field label="Username or Gmail">
@@ -214,12 +235,12 @@ export function Login() {
                     <button className="btn w-full justify-center" disabled={busy} onClick={doReset}>
                       {busy ? 'Checking…' : 'Set new password'}
                     </button>
-                    <button className="w-full text-center text-xs text-mut hover:text-slate-300" onClick={doForgot}>Didn’t get it? Send again</button>
+                    <button className="w-full text-center text-xs text-mut hover:text-ink" onClick={doForgot}>Didn’t get it? Send again</button>
                   </>
                 )}
               </div>
-              {err && <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{err}</div>}
-              {ok && <div className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{ok}</div>}
+              {err && <div className="mt-3 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm text-[#B91C1C]">{err}</div>}
+              {ok && <div className="mt-3 rounded-md border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2 text-sm text-[#15803D]">{ok}</div>}
             </>
           )}
         </div>

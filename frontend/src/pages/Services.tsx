@@ -62,7 +62,7 @@ export function Services() {
               <tbody>
                 {(data ?? []).map((sv: Service) => (
                   <tr key={sv.id}>
-                    <td><Link className="font-medium text-indigo-300 hover:underline" to={`/services/${sv.id}`}>{sv.name}</Link>
+                    <td><Link className="font-medium text-brand hover:underline" to={`/services/${sv.id}`}>{sv.name}</Link>
                       <div className="text-xs text-mut">{sv.status === 'STOPPED' ? 'Stopped by you — press Start to resume watching' : (sv.description || sv.type)}</div></td>
                     <td><StatusBadge value={sv.status} pulse={sv.status === 'RECOVERING' || sv.status === 'RESTARTING'} /></td>
                     <td className="font-mono text-xs">{sv.pid ?? '—'}</td>

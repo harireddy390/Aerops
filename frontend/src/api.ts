@@ -29,7 +29,7 @@ export const api = {
   createService: (b: unknown) => req('/api/services', json(b)),
   serviceAction: (id: number, a: 'start' | 'stop' | 'restart') =>
     req(`/api/services/${id}/${a}`, { method: 'POST' }),
-  metrics: (id: number) => req<{ cpu: number; mem_mb: number; response_ms: number | null; t: string }[]>(`/api/services/${id}/metrics`),
+  metrics: (id: number) => req<{ cpu: number; mem_mb: number; response_ms: number | null; status: string; t: string }[]>(`/api/services/${id}/metrics`),
   incidents: (q = '') => req<import('./types').Incident[]>(`/api/incidents${q}`),
   incident: (id: number) => req<Record<string, unknown>>(`/api/incidents/${id}`),
   timeline: (id: number) => req<import('./types').TimelineEvent[]>(`/api/incidents/${id}/timeline`),

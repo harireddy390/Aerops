@@ -26,11 +26,11 @@ export function ServiceDetail() {
   }
 
   if (svc.isPending) return <div className="page-sub">Loading service… <Spinner /></div>
-  if (!d) return <div className="card">Service not found. <Link className="text-indigo-400" to="/services">Back</Link></div>
+  if (!d) return <div className="card">Service not found. <Link className="text-brand" to="/services">Back</Link></div>
 
   return (
     <div>
-      <Link to="/services" className="text-sm text-indigo-400 hover:underline">← all services</Link>
+      <Link to="/services" className="text-sm text-brand hover:underline">← all services</Link>
       <div className="mb-1 mt-1 flex flex-wrap items-center gap-3">
         <h1 className="page-h !mb-0">{String(d.name)}</h1>
         <StatusBadge value={String(d.status)} pulse={String(d.status) === 'RECOVERING'} />
@@ -73,7 +73,7 @@ export function ServiceDetail() {
           {(incidents.data ?? []).length === 0 ? <EmptyState what="incidents" hint="A clean record. Simulate a failure to see the lifecycle." /> :
             (incidents.data ?? []).map((i: Incident) => (
               <div key={i.id} className="flex items-center gap-2 border-t border-line/70 py-2 text-sm first:border-0">
-                <Link className="font-mono text-indigo-300 hover:underline" to={`/incidents/${i.id}`}>#{i.id}</Link>
+                <Link className="font-mono text-brand hover:underline" to={`/incidents/${i.id}`}>#{i.id}</Link>
                 <StatusBadge value={i.status} />
                 <span className="truncate text-mut">{i.error_message.slice(0, 70)}</span>
               </div>

@@ -25,8 +25,8 @@ export function Incidents() {
                   <td><SeverityBadge value={i.severity} /></td>
                   <td><StatusBadge value={i.status} /></td>
                   <td className="text-xs text-mut">{dayTime(i.detected_at)}</td>
-                  <td className={i.recovery_verified ? 'text-emerald-300' : 'text-mut'}>{i.recovery_verified ? fmtSecs(i.duration_sec) : '—'}</td>
-                  <td className="text-right"><Link className="text-xs text-indigo-400 hover:underline" to={`/incidents/${i.id}`}>timeline</Link></td>
+                  <td className={i.recovery_verified ? 'text-[#15803D]' : 'text-mut'}>{i.recovery_verified ? fmtSecs(i.duration_sec) : '—'}</td>
+                  <td className="text-right"><Link className="text-xs text-brand hover:underline" to={`/incidents/${i.id}`}>timeline</Link></td>
                 </tr>
               ))}
             </tbody>
@@ -51,7 +51,7 @@ export function IncidentDetail() {
 
   return (
     <div>
-      <Link to="/incidents" className="text-sm text-indigo-400 hover:underline">← all incidents</Link>
+      <Link to="/incidents" className="text-sm text-brand hover:underline">← all incidents</Link>
       <div className="mb-1 mt-1 flex flex-wrap items-center gap-3">
         <h1 className="page-h !mb-0">Incident #{String(d.id)}</h1>
         <StatusBadge value={String(d.status)} pulse={String(d.status) === 'RECOVERING'} />
@@ -67,10 +67,10 @@ export function IncidentDetail() {
         <Stat label="Recovery time" value={d.recovery_verified ? fmtSecs(d.duration_sec) : '—'} sub={d.recovery_verified ? 'verified healthy' : 'not yet'} />
         <Stat label="Restart tries" value={String(d.restart_attempts)} />
         <Stat label="Exit code" value={<span className="font-mono">{String(d.exit_code ?? '—')}</span>} />
-        <Stat label="Verified" value={d.recovery_verified ? <span className="text-emerald-300">YES</span> : 'no'} />
+        <Stat label="Verified" value={d.recovery_verified ? <span className="text-[#15803D]">YES</span> : 'no'} />
       </div>
       <Card title="What broke">
-        <div className="font-mono text-[13px] text-red-200">{String(d.error_message)}</div>
+        <div className="font-mono text-[13px] text-[#B91C1C]">{String(d.error_message)}</div>
         {d.failure_reason ? <div className="mt-1 text-xs text-mut">{String(d.failure_reason).slice(0, 300)}</div> : null}
       </Card>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -78,8 +78,8 @@ export function IncidentDetail() {
           <ol className="relative ml-2 space-y-3 border-l border-line pl-5">
             {(timeline ?? []).map((e, n) => (
               <li key={n} className="relative text-sm">
-                <span className="absolute -left-[25px] top-1 h-2.5 w-2.5 rounded-full border-2 border-panel bg-indigo-400" />
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-300">{e.type.replaceAll('_', ' ')}</div>
+                <span className="absolute -left-[25px] top-1 h-2.5 w-2.5 rounded-full border-2 border-panel bg-blue-400" />
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-brand">{e.type.replaceAll('_', ' ')}</div>
                 <div>{e.message}</div>
                 <div className="font-mono text-[11px] text-mut">{clock(e.t)}</div>
               </li>
@@ -98,7 +98,7 @@ export function IncidentDetail() {
                   <span className="badge">confidence {Number(g.confidence).toFixed(2)}</span>
                   <span className="badge">risk {String(g.risk_level)}</span>
                 </div>
-                <div className="mt-1 text-[13px]">Next step: <code className="text-indigo-300">{String(g.recommended_action)}</code></div>
+                <div className="mt-1 text-[13px]">Next step: <code className="text-brand">{String(g.recommended_action)}</code></div>
               </div>
             ))}
           </Card>

@@ -22,7 +22,7 @@ export function Logs() {
       <div className="logbox">
         {rows.length === 0 ? <span className="text-mut">Nothing matches. Logs land here when services run or crash.</span> :
           rows.slice(-60).map((l, n) => (
-            <div key={n} className={/error|exception|fail|traceback|refused/i.test(l.content) ? 'text-red-400' : ''}>
+            <div key={n} className={/error|exception|fail|traceback|refused/i.test(l.content) ? 'text-[#B91C1C]' : ''}>
               <span className="text-mut">{clock(l.t)} </span>{l.content.slice(-600)}
             </div>
           ))}
@@ -44,7 +44,7 @@ export function Diagnostics() {
           <input className="input" value={text} onChange={(e) => setText(e.target.value)} />
           <button className="btn shrink-0" onClick={async () => setOut(await api.diagnoseText(text))}>Diagnose</button>
         </div>
-        {out && <pre className="logbox mt-2 !text-indigo-200">{JSON.stringify(out, null, 2)}</pre>}
+        {out && <pre className="logbox mt-2 !text-blue-200">{JSON.stringify(out, null, 2)}</pre>}
       </Card>
       <div className="mt-4">
         <Card title={`History (${(data ?? []).length})`}>
@@ -58,7 +58,7 @@ export function Diagnostics() {
                   <td className="text-xs text-mut">{d.source}{d.model ? ` · ${d.model}` : ''}</td>
                   <td>{d.confidence.toFixed(2)}</td>
                   <td>{d.risk}</td>
-                  <td><code className="text-xs text-indigo-300">{d.recommendation}</code></td>
+                  <td><code className="text-xs text-brand">{d.recommendation}</code></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -71,11 +71,11 @@ export function Diagnostics() {
 
 export function Remediation() {
   const { data } = useQuery({ queryKey: ['remediation'], queryFn: api.remediation, refetchInterval: 5000 })
-  const srcColor = (s: string) => s === 'automation' ? 'text-emerald-300' : s === 'operator' ? 'text-amber-300' : 'text-violet-300'
+  const srcColor = (s: string) => s === 'automation' ? 'text-[#15803D]' : s === 'operator' ? 'text-[#B45309]' : 'text-brand'
   return (
     <div>
       <h1 className="page-h">Fixes</h1>
-      <p className="page-sub">Every automated or manual repair. <span className="text-emerald-300">automation</span> = AeroOps itself · <span className="text-amber-300">operator</span> = you.</p>
+      <p className="page-sub">Every automated or manual repair. <span className="text-[#15803D]">automation</span> = AeroOps itself · <span className="text-[#B45309]">operator</span> = you.</p>
       <Card>
         {(data ?? []).length === 0 ? <EmptyState what="fixes" /> : (
           <table className="tbl">
