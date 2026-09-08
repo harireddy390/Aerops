@@ -27,6 +27,8 @@ export const api = {
   services: () => req<import('./types').Service[]>('/api/services'),
   service: (id: number) => req<import('./types').Service>(`/api/services/${id}`),
   createService: (b: unknown) => req('/api/services', json(b)),
+  updateService: (id: number, b: unknown) =>
+    req(`/api/services/${id}`, { ...json(b), method: 'PUT' }),
   serviceAction: (id: number, a: 'start' | 'stop' | 'restart') =>
     req(`/api/services/${id}/${a}`, { method: 'POST' }),
   metrics: (id: number) => req<{ cpu: number; mem_mb: number; response_ms: number | null; status: string; t: string }[]>(`/api/services/${id}/metrics`),

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 SAFE_ACTIONS = {
     "restart_service": "low",
     "restart_dependency": "medium",
+    "install_dependency": "medium",
     "clear_temp": "medium",
     "rollback_config": "medium",
     "retry_health_check": "low",

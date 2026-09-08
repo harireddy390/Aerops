@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.db.database import SessionLocal
 from app.db.models import Diagnosis, Incident
 from app.diagnosis import ai_diagnoser, openai_diagnoser, rule_engine
+from app.diagnosis.stackparse import parse as parse_crash
 from app.engines import audit_engine, incident_engine
 
 
@@ -75,10 +76,15 @@ async def diagnose(db: Session, incident: Incident, *, log_text: str, ai_allowed
 
 
 def diagnose_rules(db: Session, incident: Incident, *, log_text: str) -> Diagnosis:
-    rule = rule_engine.diagnose(f"{incident.error_message}\n{log_text}")
-    return _record(db, incident, source="rule", model="rules",
+    ev = parse_crash(f"{incident.error_message}\n{log_text}")
+    rule, evidence = rule_engine.diagnose_detailed(f"{incident.error_message}\n{log_text}", ev)
+    diag = _record(db, incident, source="rule", model="rules",
                    cause=rule.root_cause, expl=rule.explanation,
                    conf=rule.confidence, action=rule.recommended_action, risk=rule.risk_level)
+    incident_engine.add_event(db, incident.id, "CRASH_SITE",
+                              f"{ev.language}: {ev.exc_type} {ev.location} "
+                              f"(fingerprint {ev.fingerprint or 'n/a'}) — {evidence}"[:500])
+    return diag
 
 
 async def enrich_ai(incident_id: int, context: dict) -> None:

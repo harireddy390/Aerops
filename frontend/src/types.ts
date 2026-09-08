@@ -8,6 +8,7 @@ export type Service = {
   restart_count: number
   health_check_type: string
   health_check_url: string
+  expected_content: string
   restart_policy: string
   max_restart_attempts: number
   auto_remediation: boolean
@@ -30,6 +31,7 @@ export type Incident = {
   detected_at: string
   resolved_at: string | null
   duration_sec: number | null
+  fingerprint: string
 }
 
 export type TimelineEvent = { t: string; type: string; message: string; meta: Record<string, unknown> }

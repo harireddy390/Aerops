@@ -22,7 +22,7 @@ async def diagnose_structured(context: dict) -> dict | None:
     prompt = (
         "You are an SRE assistant. Reply with JSON ONLY, no markdown, with keys: "
         "root_cause, explanation, confidence (0-1), recommended_action "
-        "(one of restart_service, restart_dependency, clear_temp, rollback_config, retry_health_check, escalate), "
+        "(one of restart_service, restart_dependency, install_dependency, clear_temp, rollback_config, retry_health_check, escalate), "
         "risk_level (low|medium|high).\n\nIncident:\n" + json.dumps(context)[:3000]
     )
     try:

@@ -26,7 +26,8 @@ def add_event(db: Session, incident_id: int, event_type: str, message: str, meta
 
 
 def create_incident(db: Session, *, service_id: int, type: str, severity: str,
-                    error_message: str, exit_code=None, failure_reason="") -> Incident:
+                    error_message: str, exit_code=None, failure_reason="",
+                    fingerprint: str = "") -> Incident:
     # one open incident per service+type: reuse instead of duplicating
     existing = db.query(Incident).filter(
         Incident.service_id == service_id,
@@ -35,7 +36,7 @@ def create_incident(db: Session, *, service_id: int, type: str, severity: str,
         return existing
     inc = Incident(service_id=service_id, type=type, severity=severity,
                    error_message=error_message[:4000], exit_code=exit_code,
-                   failure_reason=failure_reason[:4000])
+                   failure_reason=failure_reason[:4000], fingerprint=fingerprint[:32])
     db.add(inc)
     db.flush()
     add_event(db, inc.id, "INCIDENT_CREATED", f"Incident #{inc.id} opened: {error_message[:200]}")

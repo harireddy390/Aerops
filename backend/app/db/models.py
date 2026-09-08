@@ -23,6 +23,7 @@ class Service(Base):
     env_config: Mapped[dict] = mapped_column(JSON, default=dict)
     health_check_type: Mapped[str] = mapped_column(String(20), default="process")  # process | http
     health_check_url: Mapped[str] = mapped_column(String(500), default="")
+    expected_content: Mapped[str] = mapped_column(String(500), default="")
     health_check_interval: Mapped[int] = mapped_column(Integer, default=5)
     timeout_sec: Mapped[int] = mapped_column(Integer, default=5)
     restart_policy: Mapped[str] = mapped_column(String(20), default="on-failure")  # always|on-failure|never
@@ -52,6 +53,7 @@ class Incident(Base):
     error_message: Mapped[str] = mapped_column(Text, default="")
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failure_reason: Mapped[str] = mapped_column(Text, default="")
+    fingerprint: Mapped[str] = mapped_column(String(32), default="", index=True)
     restart_attempts: Mapped[int] = mapped_column(Integer, default=0)
     recovery_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)

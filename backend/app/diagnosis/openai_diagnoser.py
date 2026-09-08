@@ -16,12 +16,12 @@ SYSTEM = (
     "You are an SRE incident analyst. Reply with JSON ONLY, no markdown, "
     "with exactly these keys: root_cause (string), explanation (string), "
     "confidence (0-1 number), recommended_action (one of restart_service, "
-    "restart_dependency, clear_temp, rollback_config, retry_health_check, "
-    "escalate), risk_level (low|medium|high)."
+    "restart_dependency, install_dependency, clear_temp, rollback_config, "
+    "retry_health_check, escalate), risk_level (low|medium|high)."
 )
 
 _ALLOWED_ACTIONS = {
-    "restart_service", "restart_dependency", "clear_temp",
+    "restart_service", "restart_dependency", "install_dependency", "clear_temp",
     "rollback_config", "retry_health_check", "escalate",
 }
 

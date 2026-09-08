@@ -28,10 +28,17 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
     inc = db.get(Incident, incident_id)
     if not inc:
         raise NotFound("incident not found")
+    occurrences = 0
+    if inc.fingerprint:
+        occurrences = db.query(Incident).filter(
+            Incident.service_id == inc.service_id,
+            Incident.fingerprint == inc.fingerprint,
+            Incident.id != inc.id).count()
     return {
         **IncidentOut.model_validate(inc).model_dump(),
         "failure_reason": inc.failure_reason,
         "acknowledged_at": inc.acknowledged_at,
+        "occurrences": occurrences,
         "diagnoses": [{"id": d.id, "source": d.source, "model": d.model, "root_cause": d.root_cause,
                        "explanation": d.explanation, "confidence": d.confidence,
                        "recommended_action": d.recommended_action,

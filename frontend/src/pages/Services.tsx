@@ -10,7 +10,7 @@ export function Services() {
   const qc = useQueryClient()
   const canAct = useCanAct()
   const { data } = useQuery({ queryKey: ['services'], queryFn: api.services, refetchInterval: 5000 })
-  const [form, setForm] = useState({ name: '', command: '', health_check_type: 'process', health_check_url: '' })
+  const [form, setForm] = useState({ name: '', command: '', health_check_type: 'process', health_check_url: '', expected_content: '' })
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -20,7 +20,7 @@ export function Services() {
     try {
       await api.createService({ ...form, working_directory: '.', health_check_interval: 5 })
       setMsg(`“${form.name}” registered and being watched.`)
-      setForm({ name: '', command: '', health_check_type: 'process', health_check_url: '' })
+      setForm({ name: '', command: '', health_check_type: 'process', health_check_url: '', expected_content: '' })
       qc.invalidateQueries({ queryKey: ['services'] })
     } catch (e) { setMsg(String((e as Error).message)) } finally { setBusy(false) }
   }
@@ -45,6 +45,7 @@ export function Services() {
             <option value="http">Check: HTTP endpoint</option>
           </select>
           <input className="input" placeholder="Health URL — e.g. http://localhost:4101 (HTTP check only)" value={form.health_check_url} onChange={(e) => setForm({ ...form, health_check_url: e.target.value })} />
+          <input className="input" placeholder="Must contain text — e.g. Welcome (blank-page detector, optional)" value={form.expected_content} onChange={(e) => setForm({ ...form, expected_content: e.target.value })} />
         </div>
         <div className="mt-3 flex items-center gap-3">
           <button className="btn" disabled={busy} onClick={create}>{busy ? 'Registering…' : 'Start watching'}</button>

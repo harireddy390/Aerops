@@ -16,6 +16,7 @@ class ServiceCreate(BaseModel):
     env_config: dict = {}
     health_check_type: str = Field(default="process", pattern="^(process|http)$")
     health_check_url: str = ""
+    expected_content: str = Field(default="", max_length=500)
     health_check_interval: int = Field(default=5, ge=1, le=3600)
     timeout_sec: int = Field(default=5, ge=1, le=120)
     restart_policy: str = Field(default="on-failure", pattern="^(always|on-failure|never)$")
@@ -35,6 +36,7 @@ class ServiceUpdate(BaseModel):
     env_config: dict | None = None
     health_check_type: str | None = Field(default=None, pattern="^(process|http)$")
     health_check_url: str | None = None
+    expected_content: str | None = Field(default=None, max_length=500)
     health_check_interval: int | None = Field(default=None, ge=1, le=3600)
     timeout_sec: int | None = Field(default=None, ge=1, le=120)
     restart_policy: str | None = Field(default=None, pattern="^(always|on-failure|never)$")
@@ -56,6 +58,7 @@ class ServiceOut(BaseModel):
     restart_count: int
     health_check_type: str
     health_check_url: str
+    expected_content: str = ""
     restart_policy: str
     max_restart_attempts: int
     auto_remediation: bool
@@ -80,6 +83,7 @@ class IncidentOut(BaseModel):
     detected_at: datetime
     resolved_at: datetime | None
     duration_sec: float | None
+    fingerprint: str = ""
 
     model_config = {"from_attributes": True}
 

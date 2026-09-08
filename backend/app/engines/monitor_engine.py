@@ -4,6 +4,7 @@ blocks request threads. Every step is audited; failures isolate per-service."""
 
 import asyncio
 import time
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -12,13 +13,15 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import sanitize_log
 from app.db.database import SessionLocal
-from app.db.models import Service, ServiceLog
+from app.db.models import Incident, Service, ServiceLog
+from app.diagnosis.stackparse import parse as parse_crash
 from app.engines import (audit_engine, diagnosis_engine, health_engine,
                          incident_engine, metrics_engine, notification_engine,
                          remediation_engine, restart_manager)
 from app.engines.restart_manager import PROJECT_ROOT
 from app.remediation import policies
 from app.utils.events import bus
+from app.utils.time import utcnow
 
 log = get_logger("monitor")
 _fail_streak: dict[int, int] = {}
@@ -26,15 +29,19 @@ _last_probe: dict[int, float] = {}
 _last_restart: dict[int, float] = {}
 
 
-def _capture_logs(db: Session, service: Service, incident_id: int) -> str:
-    """Tail the service output file into bounded ServiceLog rows. Returns combined text."""
+def _read_tail(service: Service) -> str:
+    """Read bounded service output without writing rows (pre-incident)."""
     path = PROJECT_ROOT / f".run-{service.id}.log"
     try:
         text = path.read_text(errors="replace")[-20000:] if path.exists() else ""
     except Exception as exc:
         text = f"<log unavailable: {exc}>"
-    text = sanitize_log(text)
-    tail = text[-8000:]
+    return sanitize_log(text)[-8000:]
+
+
+def _capture_logs(db: Session, service: Service, incident_id: int) -> str:
+    """Tail the service output file into bounded ServiceLog rows. Returns combined text."""
+    tail = _read_tail(service)
     if tail:
         db.add(ServiceLog(service_id=service.id, incident_id=incident_id,
                           stream="stdout", content=tail))
@@ -57,24 +64,42 @@ async def _handle_failure(service_id: int, *, error: str, exit_code=None,
         if not service or not service.enabled:
             return
         await _set_status(db, service, "CRASHED")
-        # CAPTURE + INCIDENT
+        # CAPTURE + INCIDENT (with stack forensics: fingerprint repeat crashes)
+        raw_tail = _read_tail(service) or log_hint
+        ev = parse_crash(f"{error}\n{raw_tail}")
         incident = incident_engine.create_incident(
             db, service_id=service.id, type="crash",
             severity="critical", error_message=error, exit_code=exit_code,
-            failure_reason=error[:500])
+            failure_reason=error[:500], fingerprint=ev.fingerprint)
         incident_engine.transition(db, incident, "INVESTIGATING", message="analysis started")
         await bus.publish("incident.created", {"incident_id": incident.id, "service_id": service.id})
-        tail = _capture_logs(db, service, incident.id) or log_hint
+        _capture_logs(db, service, incident.id)
+        tail = raw_tail
         incident_engine.add_event(db, incident.id, "LOGS_CAPTURED",
                                   f"captured {len(tail)} chars of output")
         # DIAGNOSE: rules instantly on the critical path; AI enriches in background
         diag = diagnosis_engine.diagnose_rules(db, incident, log_text=tail)
         incident_engine.transition(db, incident, "DIAGNOSED", message=f"{diag.source}: {diag.root_cause}")
         await bus.publish("diagnosis.completed", {"incident_id": incident.id, "cause": diag.root_cause})
+        occurrences = 0
+        if ev.fingerprint:
+            occurrences = db.query(Incident).filter(
+                Incident.service_id == service.id,
+                Incident.fingerprint == ev.fingerprint,
+                Incident.id != incident.id,
+                Incident.detected_at > utcnow() - timedelta(days=7)).count()
+            if occurrences:
+                incident_engine.add_event(
+                    db, incident.id, "REPEAT_CRASH",
+                    f"same fingerprint {ev.fingerprint} seen {occurrences}× in 7 days")
         if service.ai_diagnosis:
             asyncio.create_task(diagnosis_engine.enrich_ai(incident.id, {
                 "service": service.name, "error": incident.error_message,
                 "exit_code": incident.exit_code, "rule_cause": diag.root_cause,
+                "exception": f"{ev.exc_type}: {ev.exc_msg}"[:300],
+                "crash_site": ev.location,
+                "stack": [f"{f.file}:{f.line} in {f.func}" for f in ev.frames[-5:]],
+                "seen_before": occurrences,
                 "logs": tail[-1500:]}))
         # DECIDE + REMEDIATE under policy
         decision = policies.evaluate(diag.recommended_action,
@@ -98,10 +123,29 @@ async def _handle_failure(service_id: int, *, error: str, exit_code=None,
                                     incident_id=incident.id, action=diag.recommended_action,
                                     result=f"attempt {incident.restart_attempts}")
                 await bus.publish("restart.started", {"incident_id": incident.id})
+                from app.diagnosis.rule_engine import extract_package
+                rem_params: dict = {"risk_level": diag.risk_level}
+                if diag.recommended_action == "install_dependency":
+                    rem_params["package"] = extract_package(f"{error}\n{tail}")
                 action = await remediation_engine.execute(
                     db, incident, diag.recommended_action,
-                    source="automation", params={"risk_level": diag.risk_level})
+                    source="automation", params=rem_params)
                 restarted = action.status == "succeeded"
+                if restarted and action.action_type != "restart_service":
+                    # a fix (dep installed, temp cleared…) is not a running
+                    # process: chain a restart so verification means something
+                    if incident.restart_attempts < service.max_restart_attempts:
+                        incident.restart_attempts += 1
+                        service.restart_count += 1
+                        incident_engine.add_event(
+                            db, incident.id, "REMEDIATING",
+                            f"fix applied ({action.action_type}); restarting to verify")
+                        follow = await remediation_engine.execute(
+                            db, incident, "restart_service",
+                            source="automation", params={"risk_level": "low"})
+                        restarted = follow.status == "succeeded"
+                    else:
+                        restarted = False
                 audit_engine.record(db, "RESTART_SUCCEEDED" if restarted else "RESTART_FAILED",
                                     service_id=service.id, incident_id=incident.id,
                                     result=action.result or action.error)

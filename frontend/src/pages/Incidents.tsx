@@ -48,6 +48,10 @@ export function IncidentDetail() {
   const d = data as Record<string, unknown>
   const diags = (d.diagnoses ?? []) as Record<string, unknown>[]
   const actions = (d.actions ?? []) as Record<string, unknown>[]
+  const site = (timeline ?? []).find((e) => e.type === 'CRASH_SITE')?.message
+  const repeat = (timeline ?? []).find((e) => e.type === 'REPEAT_CRASH')?.message
+  const fp = String(d.fingerprint ?? '')
+  const seen = Number(d.occurrences ?? 0)
 
   return (
     <div>
@@ -73,6 +77,16 @@ export function IncidentDetail() {
         <div className="font-mono text-[13px] text-[#B91C1C]">{String(d.error_message)}</div>
         {d.failure_reason ? <div className="mt-1 text-xs text-mut">{String(d.failure_reason).slice(0, 300)}</div> : null}
       </Card>
+      {(site || fp) && (
+        <Card title="Crash forensics">
+          {site && <div className="font-mono text-[13px] text-ink">{site}</div>}
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+            {fp && <span className="badge border border-line bg-soft text-mut" title="Crashes with identical exception + location share this id">fingerprint {fp}</span>}
+            {repeat && <span className="badge border border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]" title="Same crash seen recently">{repeat}</span>}
+            {!repeat && seen > 0 && <span className="badge border border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]">seen {seen}× before</span>}
+          </div>
+        </Card>
+      )}
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Card title="How it unfolded">
           <ol className="relative ml-2 space-y-3 border-l border-line pl-5">

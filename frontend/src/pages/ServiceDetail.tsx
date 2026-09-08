@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -85,6 +85,31 @@ export function ServiceDetail() {
         </Card>
       </div>
       <p className="mt-3 text-xs text-mut">Health endpoint: <code>{String((d.health_check_url as string) || 'process check')}</code> · last seen {dayTime(d.updated_at)}</p>
+      {canAct && <ContentCheck sid={sid} current={String((d as Record<string, unknown>).expected_content ?? '')} />}
+    </div>
+  )
+}
+
+function ContentCheck({ sid, current }: { sid: number; current: string }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(current)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { setText(current) }, [current])
+  return (
+    <div className="mt-4">
+      <Card title="Blank-page detector" sub="Page must contain this text — otherwise it's flagged UNHEALTHY even on HTTP 200">
+        <div className="flex gap-2">
+          <input className="input" placeholder="e.g. Welcome — empty means off" value={text} onChange={(e) => setText(e.target.value)} />
+          <button className="btn shrink-0" onClick={async () => {
+            try {
+              await api.updateService(sid, { expected_content: text })
+              setMsg('Saved — next check enforces it.')
+              qc.invalidateQueries({ queryKey: ['service', sid] })
+            } catch (e) { setMsg(String((e as Error).message)) }
+          }}>Save</button>
+        </div>
+        {msg && <div className="mt-2 text-xs text-mut">{msg}</div>}
+      </Card>
     </div>
   )
 }
