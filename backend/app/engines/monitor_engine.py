@@ -178,17 +178,30 @@ async def _handle_failure(service_id: int, *, error: str, exit_code=None,
                     incident_engine.transition(db, incident, "FAILED", message="restart budget exhausted")
                 except Exception:
                     pass
-        # NOTIFY (never fatal)
+            else:
+                # unsuccessful cycle, budget remains: release back to OPEN/UNKNOWN
+                # so the next ticks retry instead of stranding mid-flight forever
+                try:
+                    incident_engine.transition(db, incident, "OPEN",
+                                               message="cycle ended without recovery — re-queued")
+                except Exception:
+                    pass
+                await _set_status(db, service, "UNKNOWN")
+        # NOTIFY (never fatal, never twice for the same incident unless resolved)
         try:
             if service.notifications_enabled:
+                from app.db.models import Notification
+                already = db.query(Notification).filter(
+                    Notification.incident_id == incident.id).count()
                 state = "RECOVERED" if incident.recovery_verified else incident.status
-                notification_engine.notify(
-                    db, f"Service {service.name} crashed — {state}",
-                    f"Incident #{incident.id}\nDiagnosis: {diag.root_cause}\n"
-                    f"Action: {diag.recommended_action}\nResult: {state}\n"
-                    f"Recovery time: {incident.duration_sec or 0:.1f}s",
-                    incident_id=incident.id)
-                await bus.publish("notification", {"incident_id": incident.id})
+                if incident.recovery_verified or already == 0:
+                    notification_engine.notify(
+                        db, f"Service {service.name} crashed — {state}",
+                        f"Incident #{incident.id}\nDiagnosis: {diag.root_cause}\n"
+                        f"Action: {diag.recommended_action}\nResult: {state}\n"
+                        f"Recovery time: {incident.duration_sec or 0:.1f}s",
+                        incident_id=incident.id)
+                    await bus.publish("notification", {"incident_id": incident.id})
         except Exception as exc:
             log.info(f"notify failed (non-fatal): {exc}")
         db.commit()

@@ -7,7 +7,11 @@ from app.monitoring.monitors import http_probe, process_alive
 
 async def check(service: Service) -> dict:
     """Run one health evaluation. Returns snapshot dict; caller persists status changes."""
-    if service.health_check_type == "http" and service.health_check_url:
+    if service.health_check_type == "http":
+        if not service.health_check_url:
+            # passive services (e.g. browser telemetry targets): nothing to probe
+            return {"ok": True, "status": "HEALTHY", "response_ms": None,
+                    "detail": "passive: external reports only"}
         ok, ms, detail = await http_probe(service.health_check_url, service.timeout_sec or 5)
         if ok and service.expected_content:
             found = await _contains(service.health_check_url, service.expected_content,

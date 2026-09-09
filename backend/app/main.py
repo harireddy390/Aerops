@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import events
-from app.api.routes import actions, auth, demo, incidents, ops, services
+from app.api.routes import actions, auth, demo, delivery, incidents, ops, services, telemetry
 from app.core.config import settings
 from app.core.exceptions import AeroOpsError, aeroops_error_handler
 from app.core.logging import get_logger
@@ -84,11 +84,13 @@ app.add_middleware(
 
 authed = [Depends(get_current_user)]
 app.include_router(auth.router)  # register/login stay public by design
+app.include_router(telemetry.router)  # browser ingest: public but incident-only, never acts
 app.include_router(services.router, dependencies=authed)
 app.include_router(incidents.router, dependencies=authed)
 app.include_router(ops.router, dependencies=authed)
 app.include_router(actions.router, dependencies=authed)
 app.include_router(demo.router, dependencies=authed)
+app.include_router(delivery.router, dependencies=authed)
 app.include_router(events.router, dependencies=authed)
 
 

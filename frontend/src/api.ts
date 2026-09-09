@@ -38,6 +38,8 @@ export const api = {
   acknowledge: (id: number) => req(`/api/incidents/${id}/acknowledge`, { method: 'POST' }),
   remediate: (id: number, action_type: string, params = {}) =>
     req(`/api/incidents/${id}/remediate`, json({ action_type, params })),
+  approveDeploy: (incident_id: number) =>
+    req(`/api/delivery/approve?incident_id=${incident_id}`, { method: 'POST' }),
   logs: (q = '') => req<{ content: string; t: string; service_id: number }[]>(`/api/logs${q}`),
   diagnostics: () => req<import('./types').Diagnosis[]>('/api/diagnostics'),
   remediation: () => req<Record<string, unknown>[]>('/api/remediation'),

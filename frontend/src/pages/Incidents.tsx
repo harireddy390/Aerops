@@ -121,7 +121,16 @@ export function IncidentDetail() {
               <div key={String(a.id)} className="border-t border-line/70 py-2 text-sm first:border-0">
                 <b>{String(a.type)}</b> <span className="text-xs text-mut">({String(a.source)})</span>{' '}
                 <StatusBadge value={String(a.status).toUpperCase()} />
-                <div className="text-mut">{String(a.result || a.error || '')}</div>
+                <div className="text-mut">{String(a.result || a.error || '').slice(0, 300)}</div>
+                {String(a.type) === 'open_draft_pr' && String(a.status) === 'pending' && canAct && (
+                  <button className="btn mt-1" onClick={async () => {
+                    if (!window.confirm('Merge this fix branch and restart the service?')) return
+                    await api.approveDeploy(iid)
+                    qc.invalidateQueries({ queryKey: ['incident', iid] })
+                  }}>
+                    Approve & Deploy
+                  </button>
+                )}
               </div>
             ))}
             {canAct && (

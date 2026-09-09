@@ -7,6 +7,7 @@ SAFE_ACTIONS = {
     "restart_service": "low",
     "restart_dependency": "medium",
     "install_dependency": "medium",
+    "apply_code_patch": "medium",
     "clear_temp": "medium",
     "rollback_config": "medium",
     "retry_health_check": "low",

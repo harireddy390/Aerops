@@ -25,6 +25,8 @@ class ServiceCreate(BaseModel):
     auto_remediation: bool = True
     ai_diagnosis: bool = True
     notifications_enabled: bool = True
+    policy_mode: str = Field(default="DRAFT_PR", pattern="^(AUTO_MERGE|DRAFT_PR)$")
+    deploy_branch: str = ""
     enabled: bool = True
 
 
@@ -45,6 +47,8 @@ class ServiceUpdate(BaseModel):
     auto_remediation: bool | None = None
     ai_diagnosis: bool | None = None
     notifications_enabled: bool | None = None
+    policy_mode: str | None = Field(default=None, pattern="^(AUTO_MERGE|DRAFT_PR)$")
+    deploy_branch: str | None = None
     enabled: bool | None = None
 
 
@@ -63,6 +67,8 @@ class ServiceOut(BaseModel):
     max_restart_attempts: int
     auto_remediation: bool
     ai_diagnosis: bool
+    policy_mode: str = "DRAFT_PR"
+    deploy_branch: str = ""
     enabled: bool
     created_at: datetime
     updated_at: datetime

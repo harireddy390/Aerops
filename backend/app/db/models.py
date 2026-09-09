@@ -31,6 +31,8 @@ class Service(Base):
     cooldown_sec: Mapped[int] = mapped_column(Integer, default=5)
     auto_remediation: Mapped[bool] = mapped_column(Boolean, default=True)
     ai_diagnosis: Mapped[bool] = mapped_column(Boolean, default=True)
+    policy_mode: Mapped[str] = mapped_column(String(20), default="DRAFT_PR")  # AUTO_MERGE|DRAFT_PR
+    deploy_branch: Mapped[str] = mapped_column(String(120), default="")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String(20), default="UNKNOWN", index=True)

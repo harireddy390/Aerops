@@ -31,11 +31,19 @@ class CrashEvidence:
     fingerprint: str = ""
 
     @property
+    def culprit(self) -> Frame | None:
+        """The frame that actually blew up: last for Python tracebacks
+        (outermost-first), first for V8 stacks (throw-site-first)."""
+        if not self.frames:
+            return None
+        return self.frames[-1] if self.language == "python" else self.frames[0]
+
+    @property
     def location(self) -> str:
         """Innermost frame first: where it actually blew up."""
-        if not self.frames:
+        f = self.culprit
+        if not f:
             return ""
-        f = self.frames[-1]
         short = f.file.split("/")[-1].split("\\")[-1]
         return f"{short}:{f.line}" + (f" ({f.func})" if f.func not in ("<module>", "<anonymous>") else "")
 
@@ -52,7 +60,7 @@ def parse(text: str) -> CrashEvidence:
             pass
         if m:
             ev.exc_type, ev.exc_msg = m.group(1).strip(), m.group(2).strip()[:500]
-        ev.fingerprint = fingerprint(ev.exc_type, ev.frames[-1] if ev.frames else None)
+        ev.fingerprint = fingerprint(ev.exc_type, ev.culprit)
         return ev
     node_frames = []
     for m in NODE_FRAME.finditer(text):
@@ -69,7 +77,7 @@ def parse(text: str) -> CrashEvidence:
         if not ev.exc_type and "Cannot read properties of undefined" in text:
             ev.exc_type = "TypeError"
             ev.exc_msg = "Cannot read properties of undefined"
-        ev.fingerprint = fingerprint(ev.exc_type, ev.frames[-1] if ev.frames else None)
+        ev.fingerprint = fingerprint(ev.exc_type, ev.culprit)
     return ev
 
 
