@@ -71,4 +71,6 @@ verify → rules → AI → policy → remediation → notify → API → SSE �
 details → logs/diag/remediation pages → failure simulation → tests → docker →
 docs → security → debugger → content checks → auto-heal → auth → light theme →
 telemetry → code-fix → **Phase 2: git worktrees, dual-tier harness, reflexion,
-delivery gates (AUTO_MERGE/DRAFT_PR + Approve & Deploy)**.
+delivery gates (AUTO_MERGE/DRAFT_PR + Approve & Deploy)** → **Phase 3:
+full-stack repo tracking (encrypted tokens), multifile diagnosis, custom test
+commands, MANUAL_APPROVAL, token push**.

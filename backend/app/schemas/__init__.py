@@ -1,7 +1,7 @@
 """Pydantic schemas: every API input validated here."""
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 STATUSES = {"HEALTHY", "WARNING", "DEGRADED", "UNHEALTHY", "CRASHED", "RESTARTING", "RECOVERING", "RECOVERED", "UNKNOWN", "STOPPED"}
 INCIDENT_STATUSES = {"OPEN", "INVESTIGATING", "DIAGNOSED", "REMEDIATING", "RECOVERING", "RESOLVED", "FAILED", "ACKNOWLEDGED"}
@@ -27,7 +27,34 @@ class ServiceCreate(BaseModel):
     notifications_enabled: bool = True
     policy_mode: str = Field(default="DRAFT_PR", pattern="^(AUTO_MERGE|DRAFT_PR)$")
     deploy_branch: str = ""
+    repo_path_or_url: str = Field(default="", max_length=500)
+    git_token: str = Field(default="", max_length=2000)  # write-only, encrypted at rest
+    target_branch: str = Field(default="main", max_length=120)
+    workspace_frontend: str = Field(default="./frontend", max_length=200)
+    workspace_backend: str = Field(default="./backend", max_length=200)
+    test_command: str = Field(default="", max_length=500)
+    remediation_policy: str = Field(default="DRAFT_PR",
+                                    pattern="^(AUTO_MERGE|DRAFT_PR|MANUAL_APPROVAL)$")
+    published_url: str = Field(default="", max_length=500)
+    client_api_key: str = Field(default="", max_length=64)
+    deploy_webhook_url: str = Field(default="", max_length=500)
     enabled: bool = True
+
+    @field_validator("test_command")
+    @classmethod
+    def _no_shell(cls, v: str) -> str:
+        bad = [";", "&", "|", "`", "$", ">", "<", "\n", "(", ")"]
+        if any(ch in v for ch in bad):
+            raise ValueError("test_command must be a plain command with arguments, no shell syntax")
+        return v
+
+    @field_validator("published_url", "deploy_webhook_url")
+    @classmethod
+    def _http_url(cls, v: str) -> str:
+        v = (v or "").strip()
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v
 
 
 class ServiceUpdate(BaseModel):
@@ -49,7 +76,38 @@ class ServiceUpdate(BaseModel):
     notifications_enabled: bool | None = None
     policy_mode: str | None = Field(default=None, pattern="^(AUTO_MERGE|DRAFT_PR)$")
     deploy_branch: str | None = None
+    repo_path_or_url: str | None = Field(default=None, max_length=500)
+    git_token: str | None = Field(default=None, max_length=2000)
+    target_branch: str | None = Field(default=None, max_length=120)
+    workspace_frontend: str | None = Field(default=None, max_length=200)
+    workspace_backend: str | None = Field(default=None, max_length=200)
+    test_command: str | None = Field(default=None, max_length=500)
+    remediation_policy: str | None = Field(default=None,
+                                           pattern="^(AUTO_MERGE|DRAFT_PR|MANUAL_APPROVAL)$")
+    published_url: str | None = Field(default=None, max_length=500)
+    client_api_key: str | None = Field(default=None, max_length=64)
+    deploy_webhook_url: str | None = Field(default=None, max_length=500)
     enabled: bool | None = None
+
+    @field_validator("test_command")
+    @classmethod
+    def _no_shell_update(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        bad = [";", "&", "|", "`", "$", ">", "<", "\n", "(", ")"]
+        if any(ch in v for ch in bad):
+            raise ValueError("test_command must be a plain command with arguments, no shell syntax")
+        return v
+
+    @field_validator("published_url", "deploy_webhook_url")
+    @classmethod
+    def _http_url_update(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v
 
 
 class ServiceOut(BaseModel):
@@ -69,6 +127,15 @@ class ServiceOut(BaseModel):
     ai_diagnosis: bool
     policy_mode: str = "DRAFT_PR"
     deploy_branch: str = ""
+    repo_path_or_url: str = ""
+    target_branch: str = "main"
+    workspace_frontend: str = "./frontend"
+    workspace_backend: str = "./backend"
+    test_command: str = ""
+    remediation_policy: str = "DRAFT_PR"
+    published_url: str = ""
+    client_api_key: str = ""
+    deploy_webhook_url: str = ""
     enabled: bool
     created_at: datetime
     updated_at: datetime

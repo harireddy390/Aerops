@@ -26,3 +26,15 @@ Key invariants:
 - AI output is data; the policy engine decides; only allowlisted actions execute.
 - Slow AI never blocks restart: rules decide fast, AI enriches async.
 - Every engine failure is isolated per service; AeroOps never crashes with a demo.
+
+## Code remediation (multi-file, Phase 2–3)
+Crash report → isolated fix branch (`git_workspace.open_workspace`, dirty-tree
+refusal) → `collect_context` (primary ±20 lines + ≤3 imported helpers ±15 lines,
+≤4 files / 6000 chars) → `propose_multifile` (v2 delimited contract:
+`<<<DIAGNOSIS>>>` / `<<<PATCHES>>>` unified diffs / `<<<REGRESSION_TEST>>>`) →
+`apply_diffs` (per-file 4-pass gate, ≤5 files, traversal-proof) → shipped test
+via `materialize_at` (never overwrites) → `verify_with_command` (syntax +
+`test_command`, argv-only, 60s) → reflexion (≤2 retries with stderr feedback) →
+delivery gate (`AUTO_MERGE` merge + stop-then-start + verify, `DRAFT_PR` push or
+hold, `MANUAL_APPROVAL` hold). Any gate failure abandons the branch and
+escalates; the running process never sees an unverified tree.

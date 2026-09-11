@@ -85,13 +85,73 @@ export function ServiceDetail() {
         </Card>
       </div>
       <p className="mt-3 text-xs text-mut">Health endpoint: <code>{String((d.health_check_url as string) || 'process check')}</code> · last seen {dayTime(d.updated_at)}</p>
-      {canAct && <ContentCheck sid={sid} current={String((d as Record<string, unknown>).expected_content ?? '')} />}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <Card title="Repository & safety">
+          {[
+            ['Repo', String((d as Record<string, unknown>).repo_path_or_url || '—')],
+            ['Target branch', String((d as Record<string, unknown>).target_branch || 'main')],
+            ['Frontend path', String((d as Record<string, unknown>).workspace_frontend || './frontend')],
+            ['Backend path', String((d as Record<string, unknown>).workspace_backend || './backend')],
+            ['Test command', String((d as Record<string, unknown>).test_command || 'auto-detect')],
+            ['Safety mode', String((d as Record<string, unknown>).remediation_policy || 'DRAFT_PR')],
+            ['Published URL', String((d as Record<string, unknown>).published_url || '—')],
+            ['Deploy hook', String((d as Record<string, unknown>).deploy_webhook_url || '—')],
+          ].map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between border-t border-line/60 py-1.5 text-[13px] first:border-0">
+              <span className="text-mut">{k}</span>
+              <code className="max-w-64 truncate" title={v}>{v}</code>
+            </div>
+          ))}
+        </Card>
+        <EmbedTelemetry sid={sid} serviceId={String(d.name)} clientKey={String((d as Record<string, unknown>).client_api_key ?? '')} canAct={canAct} />
+        {canAct && <ContentCheck sid={sid} current={String((d as Record<string, unknown>).expected_content ?? '')} />}
+      </div>
     </div>
   )
 }
 
-function ContentCheck({ sid, current }: { sid: number; current: string }) {
+function EmbedTelemetry({ sid, serviceId, clientKey, canAct }: { sid: number; serviceId: string; clientKey: string; canAct: boolean }) {
   const qc = useQueryClient()
+  const [copied, setCopied] = useState(false)
+  const [msg, setMsg] = useState('')
+  const apiBase = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000'
+  const snippet = `<script src="${apiBase}/sdk/aeroops.js" data-service-id="${serviceId}" data-api-key="${clientKey}"></script>`
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = snippet
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <Card title="Embed Telemetry" sub="Drop this in your published web app — live crashes become incidents with autonomous fixes">
+      <div className="logbox break-all">{snippet}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className="btn shrink-0" onClick={copy}>{copied ? 'Copied!' : 'Copy snippet'}</button>
+        {canAct && (
+          <button className="btn-ghost shrink-0" title="Issue a fresh ingest key (old snippets stop reporting)" onClick={async () => {
+            try {
+              await api.rotateClientKey(sid)
+              setMsg('New key issued — copy the snippet again.')
+              qc.invalidateQueries({ queryKey: ['service', sid] })
+            } catch (e) { setMsg(String((e as Error).message)) }
+          }}>Rotate key</button>
+        )}
+        {msg && <span className="text-xs text-mut">{msg}</span>}
+      </div>
+      <p className="mt-2 text-xs text-mut">React: forward boundary catches via <code>AeroOps.report(err, {'{'} componentStack {'}'})</code>. Crashes are rate-limited in the snippet and on the server.</p>
+    </Card>
+  )
+}
+
+function ContentCheck({ sid, current }: { sid: number; current: string }) {  const qc = useQueryClient()
   const [text, setText] = useState(current)
   const [msg, setMsg] = useState('')
   useEffect(() => { setText(current) }, [current])

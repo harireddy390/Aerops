@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5-coder:7b"
     ollama_timeout_sec: int = 45
+    # code-fix generations are long; diagnosis stays snappy
+    ollama_code_timeout_sec: int = 180
 
     # Cloud AI (optional primary). Key lives in backend/.env only.
     openai_api_key: str = ""

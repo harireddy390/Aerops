@@ -9,6 +9,15 @@ export type Service = {
   health_check_type: string
   health_check_url: string
   expected_content: string
+  repo_path_or_url: string
+  target_branch: string
+  workspace_frontend: string
+  workspace_backend: string
+  test_command: string
+  remediation_policy: string
+  published_url: string
+  client_api_key: string
+  deploy_webhook_url: string
   restart_policy: string
   max_restart_attempts: number
   auto_remediation: boolean

@@ -88,7 +88,9 @@ def _discover_tests(target: Path) -> list[list[str]]:
     parent = target.parent
     found: list[list[str]] = []
     for pat in (f"{stem}.test.js", f"{stem}.test.ts", f"{stem}.test.jsx",
-                f"{stem}.test.tsx", f"test_{stem}.py", f"{stem}_test.py"):
+                f"{stem}.test.tsx", f"test_{stem}.py", f"{stem}_test.py",
+                f"{stem}.aeroops.test.js", f"{stem}.aeroops.test.ts",
+                f"test_{stem}_aeroops.py"):
         if (parent / pat).exists():
             if pat.endswith(".py"):
                 found.append(["python", "-m", "pytest", "-q", pat])
@@ -103,11 +105,15 @@ async def phase_regression(target: Path) -> TierResult:
     suites = _discover_tests(target)
     if not suites:
         return TierResult("regression", True, "no collocated tests — skipped (syntax gate stands)")
+    import shutil
     failures: list[str] = []
     ran = 0
     for argv in suites:
         if argv[0] in ("npx", "npm") and not (target.parent / "package.json").exists():
             continue
+        if argv[0] == "npx" and not (target.parent / "node_modules" / ".bin" / "jest").exists() \
+                and not shutil.which("jest"):
+            continue  # never trigger network fetches from the harness
         code, out = await _run(_check_argv(argv), target.parent, TEST_TIMEOUT_SEC)
         ran += 1
         if code is None:
@@ -127,4 +133,39 @@ async def verify(target: Path) -> VerifyReport:
         tiers.append(await phase_regression(target))
     else:
         tiers.append(TierResult("regression", False, "skipped: syntax failed"))
+    return VerifyReport(ok=all(t.ok for t in tiers), tiers=tiers)
+
+
+async def run_custom_tests(*, cwd: Path, command: str) -> TierResult:
+    """Run the service's own configured test command (validated at
+    registration; shlex-split, never shelled). 60s budget."""
+    try:
+        parts = shlex.split(command, posix=True)
+    except ValueError as exc:
+        return TierResult("custom-tests", False, f"unparseable test_command: {exc}")
+    if not parts:
+        return TierResult("custom-tests", False, "empty test_command")
+    if any(any(tok in part for tok in (";", "&", "|", "`", "$", ">", "<", "\n"))
+           for part in parts):
+        return TierResult("custom-tests", False, "test_command failed safety screen")
+    code, out = await _run(parts, cwd, TEST_TIMEOUT_SEC)
+    if code is None:
+        return TierResult("custom-tests", False, f"test command timed out (60s): {command[:80]}")
+    if code != 0:
+        return TierResult("custom-tests", False, f"exit {code}: {out[-1200:]}")
+    return TierResult("custom-tests", True, out[-300:] or "green")
+
+
+async def verify_with_command(*, target: Path, test_command: str,
+                              cwd: Path) -> VerifyReport:
+    """Syntax tier, then the service's own test command (or scoped discovery
+    when none is configured)."""
+    tiers = [await phase_syntax(target)]
+    if not tiers[0].ok:
+        tiers.append(TierResult("regression", False, "skipped: syntax failed"))
+        return VerifyReport(ok=False, tiers=tiers)
+    if (test_command or "").strip():
+        tiers.append(await run_custom_tests(cwd=cwd, command=test_command))
+    else:
+        tiers.append(await phase_regression(target))
     return VerifyReport(ok=all(t.ok for t in tiers), tiers=tiers)

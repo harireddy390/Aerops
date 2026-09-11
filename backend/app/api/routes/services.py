@@ -19,6 +19,16 @@ def _out(s: Service) -> ServiceOut:
     return ServiceOut.model_validate(s)
 
 
+def _new_client_key(db: Session) -> str:
+    """Random public ingest key, unique across services."""
+    import secrets
+    for _ in range(5):
+        key = secrets.token_urlsafe(24)[:48]
+        if not db.query(Service).filter(Service.client_api_key == key).first():
+            return key
+    return secrets.token_urlsafe(24)[:48]
+
+
 @router.get("", response_model=list[ServiceOut])
 def list_services(db: Session = Depends(get_db)):
     return [_out(s) for s in db.query(Service).order_by(Service.id).all()]
@@ -33,7 +43,15 @@ def create_service(payload: ServiceCreate, db: Session = Depends(get_db),
     if db.query(Service).filter(Service.name == payload.name).first():
         from app.core.exceptions import Conflict
         raise Conflict(f"service '{payload.name}' already exists")
-    svc = Service(**payload.model_dump())
+    from app.core.crypto import encrypt_token
+    data = payload.model_dump()
+    token = data.pop("git_token", "") or ""
+    data["git_token_enc"] = encrypt_token(token)
+    if not (data.get("client_api_key") or "").strip():
+        data["client_api_key"] = _new_client_key(db)
+    else:
+        data["client_api_key"] = data["client_api_key"].strip()[:64]
+    svc = Service(**data)
     db.add(svc)
     db.commit()
     db.refresh(svc)
@@ -62,8 +80,30 @@ def update_service(service_id: int, payload: ServiceUpdate, db: Session = Depend
         split_command(data["command"])
     if "working_directory" in data:
         safe_workdir(data["working_directory"], Path(PROJECT_ROOT))
+    if "git_token" in data:
+        from app.core.crypto import encrypt_token
+        data["git_token_enc"] = encrypt_token(data.pop("git_token") or "")
+    if "client_api_key" in data and data["client_api_key"]:
+        data["client_api_key"] = data["client_api_key"].strip()[:64]
     for key, value in data.items():
+        if key == "git_token":
+            continue
         setattr(svc, key, value)
+    db.commit()
+    db.refresh(svc)
+    return _out(svc)
+
+
+@router.post("/{service_id}/rotate-key", response_model=ServiceOut)
+def rotate_client_key(service_id: int, db: Session = Depends(get_db),
+                      user: dict = Depends(require_role("admin", "operator"))):
+    """Issue a fresh public telemetry key (old embed snippets stop working)."""
+    svc = db.get(Service, service_id)
+    if not svc:
+        raise NotFound("service not found")
+    svc.client_api_key = _new_client_key(db)
+    audit_engine.record(db, "SERVICE_UPDATED", service_id=svc.id, actor=user["username"],
+                        action="rotate client_api_key", result="ok")
     db.commit()
     db.refresh(svc)
     return _out(svc)

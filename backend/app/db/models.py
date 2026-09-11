@@ -33,6 +33,20 @@ class Service(Base):
     ai_diagnosis: Mapped[bool] = mapped_column(Boolean, default=True)
     policy_mode: Mapped[str] = mapped_column(String(20), default="DRAFT_PR")  # AUTO_MERGE|DRAFT_PR
     deploy_branch: Mapped[str] = mapped_column(String(120), default="")
+    # full-stack repo tracking (Phase 3): remote or local repo, encrypted
+    # credentials, workspaces, custom harness, explicit safety mode
+    repo_path_or_url: Mapped[str] = mapped_column(String(500), default="")
+    git_token_enc: Mapped[str] = mapped_column(String(1000), default="")
+    target_branch: Mapped[str] = mapped_column(String(120), default="main")
+    workspace_frontend: Mapped[str] = mapped_column(String(200), default="./frontend")
+    workspace_backend: Mapped[str] = mapped_column(String(200), default="./backend")
+    test_command: Mapped[str] = mapped_column(String(500), default="")
+    remediation_policy: Mapped[str] = mapped_column(String(20), default="DRAFT_PR")
+    # live web deployments (external telemetry): published SPA URL, public
+    # ingest key (beacon auth), and deploy hook fired after a merged fix
+    published_url: Mapped[str] = mapped_column(String(500), default="")
+    client_api_key: Mapped[str] = mapped_column(String(64), default="", index=True)
+    deploy_webhook_url: Mapped[str] = mapped_column(String(500), default="")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     status: Mapped[str] = mapped_column(String(20), default="UNKNOWN", index=True)

@@ -1,12 +1,14 @@
 """Delivery gate: how a verified fix lands.
 
-- AUTO_MERGE: fast-forward the fix branch into the deploy branch, restart the
-  service to pick it up, resolve the incident, notify everywhere.
+- AUTO_MERGE: fast-forward the fix branch into the deploy branch, push it
+  (credentials travel per-command, never in URLs/logs), fire the service's
+  deploy_webhook_url (Vercel/Netlify/Render rebuild), restart local processes
+  to pick it up, resolve the incident, notify everywhere.
 - DRAFT_PR: keep the branch, push if a remote exists, record a Markdown PR
   body as an incident event, and wait for the 1-click approve endpoint.
 
-Push/PR-creation via git CLI only (no tokens stored); failures degrade to
-'pending approval' with the branch preserved — never force, never delete.
+Push/PR-creation via git CLI only; failures degrade to 'pending approval'
+with the branch preserved — never force, never delete.
 """
 from __future__ import annotations
 
@@ -54,6 +56,14 @@ async def deliver_merged(db: Session, ws, *, incident: Incident,
         incident_engine.add_event(db, incident.id, "MERGE_FAILED", msg[:500])
         return False
     incident_engine.add_event(db, incident.id, "MERGED", msg[:500])
+    # publish the fix so the live deployment can rebuild from it
+    from app.core.crypto import decrypt_token
+    push_ok, push_note = await push_branch(
+        ws.repo, deploy_branch, git_token=decrypt_token(svc.git_token_enc or ""))
+    incident_engine.add_event(db, incident.id, "PUSHED" if push_ok else "PUSH_SKIPPED",
+                              push_note[:300])
+    if svc.deploy_webhook_url:
+        trigger_deploy_webhook(db, incident=incident)
     # restart so the running process picks up the merged fix, then verify.
     # stop-then-start (never idempotent start): the old process must die,
     # otherwise the merge deploys without ever taking effect.
@@ -109,16 +119,24 @@ async def deliver_merged(db: Session, ws, *, incident: Incident,
 
 async def deliver_draft_pr(db: Session, ws, *, incident: Incident,
                            root_cause: str, stack: str, test_results: str,
-                           diff_stat: str) -> str:
+                           diff_stat: str, git_token: str = "") -> str:
     """Push branch if possible; always record the PR pack for 1-click approval."""
+    import base64
     svc = incident.service
     code, remotes = await git_workspace._git(ws.repo, "remote")
     pushed = False
     push_note = "no git remote configured"
     if code == 0 and remotes.strip():
-        code, out = await git_workspace._git(ws.repo, "push", "-u", "origin", ws.branch)
+        if git_token:
+            # token travels in a per-command header, never in the URL or logs
+            creds = base64.b64encode(f"x-access-token:{git_token}".encode()).decode()
+            code, out = await git_workspace._git(
+                ws.repo, "-c", f"http.extraHeader=AUTHORIZATION: basic {creds}",
+                "push", "-u", "origin", ws.branch)
+        else:
+            code, out = await git_workspace._git(ws.repo, "push", "-u", "origin", ws.branch)
         pushed = code == 0
-        push_note = "pushed to origin" if pushed else f"push failed: {out[-200:]}"
+        push_note = "pushed to origin" if pushed else "push failed (check remote/token)"
     body = pr_body(service_name=svc.name, incident=incident, root_cause=root_cause,
                    stack=stack, test_results=test_results, diff_stat=diff_stat)
     action = RemediationAction(incident_id=incident.id, action_type="open_draft_pr",
@@ -142,6 +160,51 @@ async def deliver_draft_pr(db: Session, ws, *, incident: Incident,
     db.commit()
     await bus.publish("notification", {"incident_id": incident.id})
     return body
+
+
+async def push_branch(repo: Path, branch: str, *, git_token: str = "") -> tuple[bool, str]:
+    """Push one branch to origin (best-effort). Token goes in a per-command
+    header, never in the URL or logs. Returns (pushed, note)."""
+    import base64
+    code, remotes = await git_workspace._git(repo, "remote")
+    if code != 0 or not remotes.strip():
+        return False, "no git remote configured"
+    if git_token:
+        creds = base64.b64encode(f"x-access-token:{git_token}".encode()).decode()
+        code, out = await git_workspace._git(
+            repo, "-c", f"http.extraHeader=AUTHORIZATION: basic {creds}",
+            "push", "origin", branch)
+    else:
+        code, out = await git_workspace._git(repo, "push", "origin", branch)
+    if code == 0:
+        return True, f"pushed {branch} to origin"
+    return False, f"push failed: {out[-200:]}"
+
+
+def trigger_deploy_webhook(db: Session, *, incident: Incident) -> bool:
+    """Fire the service's rebuild hook (Vercel/Netlify/Render). Best-effort:
+    failures record an event, never fail the delivery."""
+    import httpx
+    svc = incident.service
+    url = (svc.deploy_webhook_url or "").strip()
+    if not url:
+        return False
+    try:
+        r = httpx.post(url, json={"service": svc.name, "incident_id": incident.id,
+                                  "status": incident.status,
+                                  "published_url": svc.published_url or ""}, timeout=10)
+        ok = 200 <= r.status_code < 300
+    except Exception as exc:
+        incident_engine.add_event(db, incident.id, "DEPLOY_HOOK_FAILED", str(exc)[:300])
+        notification_engine.notify(
+            db, f"Rebuild hook failed on {svc.name}",
+            f"Incident #{incident.id}\nDeploy hook did not fire — trigger it by hand:\n{url}",
+            incident_id=incident.id)
+        return False
+    incident_engine.add_event(
+        db, incident.id, "DEPLOY_TRIGGERED" if ok else "DEPLOY_HOOK_FAILED",
+        f"rebuild hook {url[:120]} -> {r.status_code if ok else 'error'}"[:300])
+    return ok
 
 
 async def _healthy(service_id: int) -> bool:

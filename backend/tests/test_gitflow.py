@@ -30,7 +30,7 @@ def test_workspace_branch_commit_merge(tmp_path):
 
     async def go():
         ws = await git_workspace.open_workspace(repo, 1, "abc123")
-        assert ws.branch == "aeroops/fix-1-abc123" and ws.base_ref == head
+        assert ws.branch.startswith("aeroops/fix-1-abc123-") and ws.base_ref == head
         (repo / "w.js").write_text("const a = 2;\n")
         ok, stat = await git_workspace.commit_fix(
             ws, incident_id=1, fingerprint="abc123", root_cause="x", model="m")

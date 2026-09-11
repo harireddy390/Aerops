@@ -47,7 +47,15 @@ async def status_clean(repo: Path) -> tuple[bool, str]:
     code, out = await _git(repo, "status", "--porcelain")
     if code != 0:
         return False, f"git status failed: {out[-200:]}"
-    return (out.strip() == ""), out.strip()[:500]
+    # Our own harness litter (__pycache__, pytest caches, temp patch files)
+    # never counts as dirt; everything else blocks the run.
+    meaningful = [ln for ln in out.splitlines()
+                  if ln.strip()
+                  and "__pycache__" not in ln
+                  and ".pytest_cache" not in ln
+                  and ".aeroops.patch.tmp" not in ln
+                  and not ln.strip().endswith(".pyc")]
+    return (not meaningful), "\n".join(meaningful)[:500]
 
 
 async def current_branch(repo: Path) -> str:
@@ -55,8 +63,10 @@ async def current_branch(repo: Path) -> str:
     return out.strip() if code == 0 else ""
 
 
-async def open_workspace(repo: Path, incident_id: int, fingerprint: str) -> Workspace:
+async def open_workspace(repo: Path, incident_id: int, fingerprint: str,
+                       *, prefix: str = "fix") -> Workspace:
     """Fork an isolated fix branch. Raises RuntimeError on any safety violation."""
+    import secrets
     repo = repo.resolve()
     if not is_repo(repo):
         raise RuntimeError(f"not a git repo: {repo}")
@@ -67,19 +77,61 @@ async def open_workspace(repo: Path, incident_id: int, fingerprint: str) -> Work
     if code != 0:
         raise RuntimeError(f"cannot read HEAD: {head[-200:]}")
     head = head.strip()
-    branch = f"aeroops/fix-{incident_id}-{fingerprint[:8] or head[:8]}"
-    await _git(repo, "branch", "-D", branch)  # stale retry from an earlier run
+    tag = "".join(ch for ch in prefix if ch.isalnum() or ch in ("-", "_")) or "fix"
+    branch = f"aeroops/{tag}-{incident_id}-{fingerprint[:8] or head[:8]}-{secrets.token_hex(2)}"
     code, out = await _git(repo, "checkout", "-b", branch, head)
     if code != 0:
         raise RuntimeError(f"cannot create fix branch: {out[-200:]}")
+    # tidy other stale branches from earlier attempts on this incident
+    code, listed = await _git(repo, "branch", "--list", f"aeroops/{tag}-{incident_id}-*")
+    if code == 0:
+        for other in listed.split():
+            other = other.strip().lstrip("* ")
+            if other and other != branch and other.startswith("aeroops/"):
+                await _git(repo, "branch", "-D", other)
     return Workspace(repo=repo, branch=branch, base_ref=head)
+
+
+async def sync_repo(repo: Path, *, target_branch: str = "") -> str:
+    """Best-effort refresh of a linked clone before a client fix (never raises).
+
+    Fetches the remote and fast-forwards the target branch when the tree is
+    clean. Any failure returns a short note; the pipeline then works from the
+    local HEAD instead of aborting the incident.
+    """
+    repo = repo.resolve()
+    if not is_repo(repo):
+        return "not a git repo, using local files"
+    clean, _ = await status_clean(repo)
+    if not clean:
+        return "tree dirty, skipped sync (refusing to touch uncommitted work)"
+    branch = (target_branch or "").strip() or await current_branch(repo) or "main"
+    code, remotes = await _git(repo, "remote")
+    if code != 0 or not remotes.strip():
+        code, out = await _git(repo, "checkout", "-q", branch)
+        return "no remote configured, staying on local HEAD" if code == 0 else f"no remote ({out[-120:]})"
+    await _git(repo, "fetch", "--prune", "origin")
+    code, out = await _git(repo, "checkout", "-q", branch)
+    if code != 0:
+        return f"cannot checkout {branch}, staying put"
+    code, out = await _git(repo, "pull", "--ff-only", "-q", "origin", branch)
+    if code != 0:
+        return f"on {branch}, remote not fast-forwardable — using local HEAD"
+    code, head = await _git(repo, "rev-parse", "--short", "HEAD")
+    return f"synced {branch} @ {head.strip()}" if code == 0 else f"synced {branch}"
 
 
 async def commit_fix(ws: Workspace, *, incident_id: int, fingerprint: str,
                      root_cause: str, model: str) -> tuple[bool, str]:
-    code, out = await _git(ws.repo, "add", "-A")
+    # Stage deliberately, never `git add -A`: tracked modifications plus our
+    # namespaced regression tests only. Harness caches (__pycache__ etc.)
+    # must never ride along into the fix commit.
+    code, out = await _git(ws.repo, "add", "-u")
     if code != 0:
         return False, f"git add failed: {out[-200:]}"
+    code, _ = await _git(ws.repo, "add", "--", "*.aeroops.test.js", "*.aeroops.test.ts",
+                         "test_*_aeroops.py")
+    code, diff_stat = await _git(ws.repo, "diff", "--cached", "--stat")
     code, diff_stat = await _git(ws.repo, "diff", "--cached", "--stat")
     if code != 0 or not diff_stat.strip():
         return False, "nothing to commit (patch produced no diff)"
