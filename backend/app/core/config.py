@@ -42,10 +42,15 @@ class Settings(BaseSettings):
 
     metrics_retention_days: int = 7
     log_tail_lines: int = 200
-    cors_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,"
+        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,http://127.0.0.1:5176,"
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
 
-    # Auth is ON: first registered user becomes admin, then registration closes.
+    # Auth configuration
     auth_enabled: bool = True
+    jwt_secret: str = "dev-only-change-me-must-be-at-least-32-bytes-long"
     # When true, anyone can sign up — but only ever as viewer.
     # Admins/operators are promoted in Settings → Team.
     allow_open_signup: bool = True

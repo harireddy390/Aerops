@@ -1,6 +1,6 @@
 # AeroOps morning starter — run this any time to bring the whole project up.
 # Usage:  powershell -ExecutionPolicy Bypass -File "C:\AeroOps-Project\scripts\resume-aeroops.ps1"
-$proj = 'C:\AeroOps-Project'
+$proj = if ($PSScriptRoot) { (Split-Path -Parent $PSScriptRoot) } else { 'C:\AeroOps-Project' }
 $api = 'http://localhost:8000'
 
 function Free-Port($port) {

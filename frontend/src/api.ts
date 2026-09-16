@@ -1,4 +1,4 @@
-import { token } from './auth'
+import { parseErrorDetail, token } from './auth'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -6,13 +6,22 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> | undefined) }
   const t = token()
   if (t) headers['Authorization'] = `Bearer ${t}`
-  const r = await fetch(`${BASE}${path}`, { ...opts, headers })
+  let r: Response
+  try {
+    r = await fetch(`${BASE}${path}`, { ...opts, headers })
+  } catch {
+    throw new Error(`Unable to connect to AeroOps backend (${BASE}). Ensure the backend server is running on port 8000.`)
+  }
   if (r.status === 401 && !window.location.pathname.startsWith('/login')) {
     window.dispatchEvent(new Event('aeroops:logout'))
     window.location.href = '/login'
     throw new Error('Session expired — log in again')
   }
-  if (!r.ok) throw new Error(`${opts?.method ?? 'GET'} ${path} -> ${r.status}`)
+  if (!r.ok) {
+    const errData = await r.json().catch(() => ({}))
+    const detail = parseErrorDetail(errData, `${opts?.method ?? 'GET'} ${path} -> ${r.status}`)
+    throw new Error(detail)
+  }
   if (r.status === 204) return undefined as T
   return r.json() as Promise<T>
 }

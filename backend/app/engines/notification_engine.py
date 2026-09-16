@@ -20,15 +20,16 @@ def email_configured() -> bool:
     return bool(settings.smtp_user and settings.smtp_pass and settings.mail_to)
 
 
-def send_email(subject: str, text: str) -> bool:
+def send_email(subject: str, text: str, to: str | None = None) -> bool:
     """Send via Gmail SMTP (STARTTLS, app password). Returns delivered or not."""
-    if not email_configured():
+    recipient = to or settings.mail_to
+    if not (settings.smtp_user and settings.smtp_pass and recipient):
         return False
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = settings.mail_from or settings.smtp_user
-        msg["To"] = settings.mail_to
+        msg["To"] = recipient
         html = "<pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(f"<h3>{subject}</h3>{html}", "html"))

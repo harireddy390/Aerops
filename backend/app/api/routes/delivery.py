@@ -19,9 +19,14 @@ class Approve(BaseModel):
 
 
 @router.post("/approve")
-async def approve(incident_id: int, user: dict = Depends(require_role("admin", "operator")),
+async def approve(payload: Approve | None = None, incident_id: int | None = None,
+                  user: dict = Depends(require_role("admin", "operator")),
                   db: Session = Depends(get_db)):
-    inc = db.get(Incident, incident_id)
+    target_id = incident_id or (payload.incident_id if payload else None)
+    if not target_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="incident_id is required (query parameter or JSON body)")
+    inc = db.get(Incident, target_id)
     if not inc:
         raise NotFound("incident not found")
     pr = (db.query(RemediationAction)

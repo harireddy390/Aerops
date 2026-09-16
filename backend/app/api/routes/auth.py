@@ -7,10 +7,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict
+from app.core.logging import get_logger
 from app.core.security import (get_current_user, hash_password, require_role,
                                verify_password, create_token)
 from app.db.database import get_db
@@ -18,6 +19,7 @@ from app.db.models import PasswordReset, User
 from app.engines import audit_engine, notification_engine
 from app.utils.time import utcnow
 
+log = get_logger("auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -81,8 +83,12 @@ class PasswordResetAdmin(BaseModel):
 
 
 def _find_user(db: Session, identity: str) -> User | None:
+    clean_id = identity.strip()
+    if not clean_id:
+        return None
     return db.query(User).filter(
-        or_(User.username == identity, User.email == identity)).first()
+        or_(func.lower(User.username) == func.lower(clean_id),
+            func.lower(User.email) == func.lower(clean_id))).first()
 
 
 @router.get("/status")
@@ -101,11 +107,13 @@ def register(payload: Register, db: Session = Depends(get_db)):
     if not first and not settings.allow_open_signup:
         raise HTTPException(status_code=403,
                             detail="An admin already exists — ask them to create your account in Settings → Team")
-    if db.query(User).filter(User.username == payload.username).first():
+    username = payload.username.strip()
+    email = payload.email.strip()
+    if db.query(User).filter(func.lower(User.username) == func.lower(username)).first():
         raise Conflict("That username is taken — pick another")
-    if db.query(User).filter(User.email == payload.email).first():
+    if db.query(User).filter(func.lower(User.email) == func.lower(email)).first():
         raise Conflict("That Gmail is already registered — try signing in")
-    user = User(username=payload.username, email=payload.email,
+    user = User(username=username, email=email,
                 password_hash=hash_password(payload.password),
                 role="admin" if first else "viewer")
     db.add(user)
@@ -118,7 +126,7 @@ def register(payload: Register, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(payload: Login, db: Session = Depends(get_db)):
-    user = _find_user(db, payload.username)
+    user = _find_user(db, payload.username.strip())
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Wrong username or password — check caps lock and try again")
     return {"token": create_token(user.id, user.username, user.role, remember=payload.remember),
@@ -144,13 +152,15 @@ def forgot_password(payload: PasswordResetRequest, db: Session = Depends(get_db)
             code_hash=hashlib.sha256(code.encode()).hexdigest(),
             expires_at=utcnow() + timedelta(minutes=RESET_TTL_MIN)))
         db.commit()
-        notification_engine.send_email(
+        sent = notification_engine.send_email(
             "[AeroOps] Your password reset code",
             f"Hi {user.username},\n\nYour AeroOps reset code is: {code}\n\n"
             f"It expires in {RESET_TTL_MIN} minutes and works once. "
-            f"If you didn't ask for this, ignore this email.\n")
+            f"If you didn't ask for this, ignore this email.\n",
+            to=user.email)
+        log.info(f"Password reset code for user '{user.username}' ({user.email}): {code} (email sent: {sent})")
         audit_engine.record(db, "PASSWORD_RESET_SENT", actor="auth",
-                            action=f"code for {user.username}", result="emailed")
+                            action=f"code for {user.username}", result="emailed" if sent else "logged")
         db.commit()
     return {"ok": True, "detail": "If an account matches, a 6-digit code is on its way to its Gmail"}
 

@@ -27,10 +27,9 @@ _ROLES = {"viewer": 1, "operator": 2, "admin": 3}
 
 
 def _jwt_secret() -> str:
-    secret = os.environ.get("JWT_SECRET", "")
-    if not secret:
-        # dev-only fallback; set JWT_SECRET in production
-        secret = "dev-only-change-me"
+    secret = getattr(settings, "jwt_secret", "") or os.environ.get("JWT_SECRET", "")
+    if not secret or secret == "dev-only-change-me":
+        secret = "dev-only-change-me-must-be-at-least-32-bytes-long"
     return secret
 
 

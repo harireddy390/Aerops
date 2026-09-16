@@ -15,6 +15,7 @@ Model output never reaches a shell: commands are shlex-split and argv-executed.
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -86,7 +87,7 @@ def read_context(target: Path, line: int, radius: int = 20) -> str:
 def _check_command(command: str, cwd: Path, project_root: Path) -> list[str]:
     if not any(command.strip().startswith(prefix) for prefix in VERIFY_ALLOWLIST):
         raise ValueError(f"verification command not allowlisted: {command[:80]}")
-    parts = shlex.split(command, posix=True)
+    parts = shlex.split(command, posix=os.name != "nt")
     if any(any(tok in part for tok in (";", "&", "|", "`", "$", ">", "<", "\n")) for part in parts[1:]):
         raise ValueError("metacharacters not allowed in verification args")
     return parts

@@ -29,14 +29,38 @@ export function token(): string | null {
   }
 }
 
+export function parseErrorDetail(data: unknown, fallback: string): string {
+  if (!data || typeof data !== 'object') return fallback
+  const d = (data as Record<string, unknown>).detail
+  if (typeof d === 'string') return d
+  if (Array.isArray(d)) {
+    return d
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object' && 'msg' in item) return String((item as { msg: unknown }).msg)
+        return JSON.stringify(item)
+      })
+      .join(', ')
+  }
+  if (typeof (data as Record<string, unknown>).message === 'string') {
+    return (data as Record<string, unknown>).message as string
+  }
+  return fallback
+}
+
 async function api(path: string, body: unknown) {
-  const r = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let r: Response
+  try {
+    r = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new Error(`Unable to connect to AeroOps backend (${BASE}). Ensure the backend server is running on port 8000.`)
+  }
   const data = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error((data as Record<string, string>).detail ?? `Request failed (${r.status})`)
+  if (!r.ok) throw new Error(parseErrorDetail(data, `Request failed (${r.status})`))
   return data
 }
 
@@ -68,11 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       try {
         const r = await fetch(`${BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${t}` } })
+        if (r.status === 401) {
+          if (live) save(null)
+          return
+        }
         if (!r.ok) throw new Error('bad token')
         const me = await r.json()
         if (live) save({ token: t, username: me.username, role: me.role })
       } catch {
-        if (live) save(null)
+        // network issue: don't clear token on momentary connection drop
       } finally {
         if (live) setChecked(true)
       }

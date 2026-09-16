@@ -158,7 +158,13 @@ export function Login() {
           </div>
 
           {tab !== 'forgot' && (
-            <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (tab === 'signin') doSignin()
+                else doSignup()
+              }}
+            >
               <h2 className="text-xl font-bold text-ink">{tab === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
               <p className="mb-4 mt-1 text-sm text-mut">
                 {open === true && first && 'No users yet — your account becomes the admin.'}
@@ -167,7 +173,7 @@ export function Login() {
                 {open === false && tab === 'signin' && 'Log in to your operations console.'}
               </p>
               <div className="space-y-3">
-                <Field label="Username">
+                <Field label="Username or Gmail">
                   <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
                 </Field>
                 {tab === 'signup' && (
@@ -203,14 +209,20 @@ export function Login() {
                 )}
               </div>
               {err && <div className="mt-3 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm text-[#B91C1C]">{err}</div>}
-              <button className="btn mt-4 w-full justify-center" disabled={busy || (tab === 'signup' && open === false)} onClick={tab === 'signin' ? doSignin : doSignup}>
+              <button type="submit" className="btn mt-4 w-full justify-center" disabled={busy || (tab === 'signup' && open === false)}>
                 {busy ? 'One moment…' : tab === 'signin' ? 'Sign in' : 'Sign up'}
               </button>
-            </>
+            </form>
           )}
 
           {tab === 'forgot' && (
-            <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!forgotSent) doForgot()
+                else doReset()
+              }}
+            >
               <h2 className="text-xl font-bold text-ink">Reset password</h2>
               <p className="mb-4 mt-1 text-sm text-mut">We’ll email a 6-digit code to the Gmail on your account. It works once, for 15 minutes.</p>
               <div className="space-y-3">
@@ -218,7 +230,7 @@ export function Login() {
                   <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
                 </Field>
                 {!forgotSent ? (
-                  <button className="btn w-full justify-center" disabled={busy} onClick={doForgot}>
+                  <button type="submit" className="btn w-full justify-center" disabled={busy}>
                     {busy ? 'Sending…' : 'Email me the code'}
                   </button>
                 ) : (
@@ -232,16 +244,16 @@ export function Login() {
                     <Field label="Confirm new password">
                       <input className="input" type={show ? 'text' : 'password'} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
                     </Field>
-                    <button className="btn w-full justify-center" disabled={busy} onClick={doReset}>
+                    <button type="submit" className="btn w-full justify-center" disabled={busy}>
                       {busy ? 'Checking…' : 'Set new password'}
                     </button>
-                    <button className="w-full text-center text-xs text-mut hover:text-ink" onClick={doForgot}>Didn’t get it? Send again</button>
+                    <button type="button" className="w-full text-center text-xs text-mut hover:text-ink" onClick={doForgot}>Didn’t get it? Send again</button>
                   </>
                 )}
               </div>
               {err && <div className="mt-3 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-sm text-[#B91C1C]">{err}</div>}
               {ok && <div className="mt-3 rounded-md border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2 text-sm text-[#15803D]">{ok}</div>}
-            </>
+            </form>
           )}
         </div>
       </div>

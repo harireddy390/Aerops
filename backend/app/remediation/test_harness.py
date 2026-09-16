@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass, field
@@ -140,7 +141,7 @@ async def run_custom_tests(*, cwd: Path, command: str) -> TierResult:
     """Run the service's own configured test command (validated at
     registration; shlex-split, never shelled). 60s budget."""
     try:
-        parts = shlex.split(command, posix=True)
+        parts = shlex.split(command, posix=os.name != "nt")
     except ValueError as exc:
         return TierResult("custom-tests", False, f"unparseable test_command: {exc}")
     if not parts:
