@@ -1,7 +1,7 @@
 """Service registry + lifecycle controls."""
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFound
@@ -35,7 +35,7 @@ def list_services(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ServiceOut, status_code=201)
-def create_service(payload: ServiceCreate, db: Session = Depends(get_db),
+def create_service(payload: ServiceCreate, background: BackgroundTasks, db: Session = Depends(get_db),
                    user: dict = Depends(require_role("admin", "operator"))):
     if payload.command:
         split_command(payload.command)  # validate now, fail fast
@@ -58,6 +58,12 @@ def create_service(payload: ServiceCreate, db: Session = Depends(get_db),
     audit_engine.record(db, "SERVICE_CREATED", service_id=svc.id, actor=user["username"],
                         action="create", result="ok")
     db.commit()
+
+    if getattr(svc, "repo_path_or_url", "").strip():
+        from app.remediation.workspace_manager import ensure_workspace, is_remote_url
+        if is_remote_url(svc.repo_path_or_url):
+            background.add_task(ensure_workspace, svc)
+
     return _out(svc)
 
 
@@ -199,3 +205,35 @@ def service_logs(service_id: int, limit: int = 100, db: Session = Depends(get_db
             .order_by(ServiceLog.id.desc()).limit(min(limit, 500)).all()[::-1])
     return [{"stream": r.stream, "content": r.content[-4000:], "t": r.timestamp.isoformat(),
              "incident_id": r.incident_id} for r in rows]
+
+
+@router.post("/{service_id}/synthetic-probe")
+async def run_synthetic_probe(service_id: int, db: Session = Depends(get_db)):
+    svc = db.get(Service, service_id)
+    if not svc:
+        raise NotFound("service not found")
+    url = (svc.published_url or svc.health_check_url or "").strip()
+    if not url:
+        return {"ok": False, "status": "NO_URL", "reason": "No published_url or health_check_url configured for this service."}
+    from app.monitoring.synthetic_monitor import probe_synthetic
+    result = await probe_synthetic(url, expected_content=svc.expected_content or "", service_id=svc.id)
+    return result
+
+
+@router.post("/{service_id}/deploy-webhook")
+async def trigger_service_deploy_webhook(service_id: int, db: Session = Depends(get_db),
+                                         user: dict = Depends(require_role("admin", "operator"))):
+    svc = db.get(Service, service_id)
+    if not svc:
+        raise NotFound("service not found")
+    url = (svc.deploy_webhook_url or "").strip()
+    if not url:
+        return {"ok": False, "detail": "no deploy_webhook_url configured for this service"}
+    import httpx
+    try:
+        r = httpx.post(url, json={"service": svc.name, "triggered_by": user["username"], "published_url": svc.published_url or ""}, timeout=10)
+        ok = 200 <= r.status_code < 300
+        return {"ok": ok, "status_code": r.status_code, "detail": f"Webhook triggered -> {r.status_code}"}
+    except Exception as exc:
+        return {"ok": False, "status_code": 0, "detail": f"Webhook request failed: {exc}"}
+

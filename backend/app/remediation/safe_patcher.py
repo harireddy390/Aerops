@@ -191,52 +191,119 @@ async def _git(repo: Path, *args: str, timeout: int = 30) -> tuple[int, str]:
     return await _aio.to_thread(_call)
 
 
-async def apply_diff(*, repo: Path, diff_text: str) -> PatchResult:
-    """Apply a unified diff via `git apply --check` then `git apply`.
-    Rejects empty diffs, path escapes (..), and absolute targets."""
-    text = (diff_text or "").strip()
-    if "--- " not in text or "@@" not in text:
-        return PatchResult(False, "no unified diff found in proposal")
-    for line in text.splitlines():
-        if line.startswith(("--- ", "+++ ")):
-            path = line[4:].strip().split("\t")[0]
-            if path in ("/dev/null", "dev/null"):
-                continue
-            for prefix in ("a/", "b/"):
-                if path.startswith(prefix):
-                    path = path[2:]
-                    break
-            if path.startswith("/") or ".." in Path(path).parts:
-                return PatchResult(False, f"diff escapes repo: {path[:120]}")
-    # pass 1: as the model wrote it (exact hunk headers)
-    ok, out = await _apply_raw(repo, text)
-    if ok:
-        return PatchResult(True, "diff applied cleanly")
-    # pass 2: models miscount @@ offsets constantly but copy content well.
-    # Recompute hunk headers from an exact content search; content itself
-    # must still match byte-for-byte exactly once, or we abort.
-    fixed = _renumber_hunks(repo, text)
-    if fixed is not None:
-        ok, out2 = await _apply_raw(repo, fixed)
-        if ok:
-            return PatchResult(True, "diff applied cleanly (hunk offsets renormalized)")
-    # pass 3: trailing-whitespace drift only (still content-verified by git).
-    # Editors and models alike add stray spaces; meaning is unchanged.
-    if fixed is not None:
-        ok, out3 = await _apply_raw_ws(repo, fixed)
-        if ok:
-            return PatchResult(True, "diff applied cleanly (whitespace drift tolerated)")
-    # pass 4: byte-exact in-process apply for files git can't match itself,
-    # notably CRLF working trees vs LF model output. The hunk content must
-    # still match exactly once (splitlines-normalized); original line endings
-    # are preserved on write.
-    exact_note = ""
-    if fixed is not None:
-        exact = _apply_exact(repo, fixed)
-        if exact is True:
-            return PatchResult(True, "diff applied cleanly (exact content match)")
-        exact_note = f" | exact-apply: {exact}"
-    return PatchResult(False, f"git apply --check rejected: {out[-400:]}{exact_note}"[:600])
+def _apply_fuzzy_fallback(repo: Path, diff_text: str) -> bool | str:
+    """Fallback when git apply and hunk renumbering both fail due to drifted or
+    hallucinated context lines. Extracts deleted (-) and added (+) lines per hunk.
+    If the deleted lines match a unique location in the target file (either exact or
+    ignoring leading/trailing whitespace), replaces that location with the added lines.
+    Preserves target file CRLF/LF line endings.
+    """
+    import re as _re
+    lines = diff_text.splitlines()
+    try:
+        plus_idx = next(i for i, l in enumerate(lines) if l.startswith("+++ "))
+    except StopIteration:
+        return "no target file in diff"
+    if sum(1 for l in lines if l.startswith("--- ")) > 1:
+        return "multi-file diffs not supported in single fuzzy hunk"
+    target_rel = lines[plus_idx][4:].strip().split("\t")[0]
+    for prefix in ("b/", "a/"):
+        if target_rel.startswith(prefix):
+            target_rel = target_rel[2:]
+            break
+    target = (repo / target_rel).resolve()
+    if not target.is_file():
+        return f"target file not found: {target_rel}"
+    try:
+        raw = target.read_bytes()
+    except OSError as exc:
+        return f"cannot read target: {exc}"
+    ending = "\r\n" if b"\r\n" in raw else "\n"
+    file_lines = raw.decode("utf-8", "replace").splitlines()
+
+    # Parse hunks into (del_lines, add_lines)
+    hunks: list[tuple[list[str], list[str]]] = []
+    i = plus_idx + 1
+    while i < len(lines):
+        m = _re.match(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@", lines[i])
+        if not m:
+            i += 1
+            continue
+        del_lines: list[str] = []
+        add_lines: list[str] = []
+        j = i + 1
+        while j < len(lines) and not lines[j].startswith("@@") \
+                and not lines[j].startswith(("--- ", "+++ ", "diff ")) \
+                and lines[j].strip() != "---":
+            if lines[j].startswith("-"):
+                del_lines.append(lines[j][1:])
+            elif lines[j].startswith("+"):
+                add_lines.append(lines[j][1:])
+            j += 1
+        if del_lines or add_lines:
+            hunks.append((del_lines, add_lines))
+        i = j
+
+    if not hunks:
+        return "no hunks found"
+
+    new_file_lines = list(file_lines)
+    applied_count = 0
+
+    for del_lines, add_lines in hunks:
+        if not del_lines:
+            continue
+
+        exact_hits = [
+            k for k in range(len(new_file_lines) - len(del_lines) + 1)
+            if new_file_lines[k : k + len(del_lines)] == del_lines
+        ]
+        if len(exact_hits) == 1:
+            k = exact_hits[0]
+            new_file_lines[k : k + len(del_lines)] = add_lines
+            applied_count += 1
+            continue
+
+        del_stripped = [l.strip() for l in del_lines if l.strip()]
+        if not del_stripped:
+            continue
+        strip_hits = []
+        for k in range(len(new_file_lines) - len(del_lines) + 1):
+            window = [l.strip() for l in new_file_lines[k : k + len(del_lines)] if l.strip()]
+            if window == del_stripped:
+                strip_hits.append(k)
+
+        if len(strip_hits) == 1:
+            k = strip_hits[0]
+            orig_indent = ""
+            if new_file_lines[k]:
+                orig_indent = new_file_lines[k][:len(new_file_lines[k]) - len(new_file_lines[k].lstrip())]
+            adjusted_adds = []
+            for al in add_lines:
+                al_strip = al.strip()
+                if al_strip:
+                    al_indent = al[:len(al) - len(al.lstrip())]
+                    adjusted_adds.append(orig_indent + al_strip if not al_indent else al)
+                else:
+                    adjusted_adds.append("")
+            new_file_lines[k : k + len(del_lines)] = adjusted_adds
+            applied_count += 1
+            continue
+
+        return f"deleted lines matched {len(exact_hits)} exact / {len(strip_hits)} stripped locations (need exactly 1)"
+
+    if applied_count == 0:
+        return "could not uniquely anchor any hunk"
+
+    try:
+        content = ending.join(new_file_lines)
+        if not content.endswith(ending):
+            content += ending
+        target.write_bytes(content.encode("utf-8"))
+    except OSError as exc:
+        return f"write failed: {exc}"
+    return True
+
 
 
 def _apply_exact(repo: Path, diff_text: str) -> bool | str:
@@ -379,7 +446,12 @@ async def apply_diff(repo: Path, diff_text: str) -> PatchResult:
         if exact is True:
             return PatchResult(True, "diff applied cleanly (exact content match)")
         exact_note = f" | exact-apply: {exact}"
-    return PatchResult(False, f"git apply --check rejected: {out[-400:]}{exact_note}"[:600])
+    # pass 5: resilient deleted-lines & fuzzy context matcher
+    fuzzy = _apply_fuzzy_fallback(repo, text)
+    if fuzzy is True:
+        return PatchResult(True, "diff applied cleanly (fuzzy context match)")
+    fuzzy_note = f" | fuzzy-apply: {fuzzy}" if isinstance(fuzzy, str) else ""
+    return PatchResult(False, f"git apply --check rejected: {out[-400:]}{exact_note}{fuzzy_note}"[:600])
 
 
 async def _apply_raw(repo: Path, text: str) -> tuple[bool, str]:

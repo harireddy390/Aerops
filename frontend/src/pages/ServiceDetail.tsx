@@ -48,6 +48,14 @@ export function ServiceDetail() {
             <button className="btn" onClick={() => act('start')}>Start</button>
             <button className="btn-ghost" onClick={() => act('stop')}>Stop</button>
             <button className="btn-ghost" onClick={() => act('restart')}>Restart</button>
+            {Boolean((d as Record<string, unknown>).deploy_webhook_url) && (
+              <button className="btn-ghost" title="Trigger hosting deploy webhook" onClick={async () => {
+                try {
+                  const res = await api.triggerDeployWebhook(sid)
+                  setMsg(res.detail)
+                } catch (e) { setMsg(String((e as Error).message)) }
+              }}>Trigger Deploy Webhook</button>
+            )}
             <ConfirmButton danger label="Simulate failure" ask={`Crash ${String(d.name)} on purpose to watch AeroOps recover it?`} onConfirm={async () => { await api.simulateFailure(sid); setMsg('Crashed on purpose — watch it come back.') }} />
           </>
         ) : <span className="text-xs text-mut">Viewer role — watching only.</span>}
@@ -105,6 +113,7 @@ export function ServiceDetail() {
         </Card>
         <EmbedTelemetry sid={sid} serviceId={String(d.name)} clientKey={String((d as Record<string, unknown>).client_api_key ?? '')} canAct={canAct} />
         {canAct && <ContentCheck sid={sid} current={String((d as Record<string, unknown>).expected_content ?? '')} />}
+        <SyntheticBrowserCheck sid={sid} url={String((d as Record<string, unknown>).published_url || (d as Record<string, unknown>).health_check_url || '')} />
       </div>
     </div>
   )
@@ -169,6 +178,50 @@ function ContentCheck({ sid, current }: { sid: number; current: string }) {  con
           }}>Save</button>
         </div>
         {msg && <div className="mt-2 text-xs text-mut">{msg}</div>}
+      </Card>
+    </div>
+  )
+}
+
+function SyntheticBrowserCheck({ sid, url }: { sid: number; url: string }) {
+  const [probing, setProbing] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; status: string; reason: string; dom_length: number } | null>(null)
+  const [msg, setMsg] = useState('')
+
+  const runProbe = async () => {
+    setProbing(true)
+    setMsg('Launching headless browser probe...')
+    try {
+      const res = await api.runSyntheticProbe(sid)
+      setResult(res)
+      setMsg(res.reason)
+    } catch (e) {
+      setMsg(String((e as Error).message))
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 md:col-span-2">
+      <Card title="Synthetic Browser Health Check" sub="Headless Chromium probe: renders JavaScript, checks DOM hydration, and catches blank pages">
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="btn" disabled={probing} onClick={runProbe}>
+            {probing ? 'Probing...' : 'Run Synthetic Probe Now'}
+          </button>
+          {result && (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded ${result.ok ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>
+              {result.status}
+            </span>
+          )}
+          {msg && <span className="text-xs text-mut">{msg}</span>}
+        </div>
+        {result && (
+          <div className="mt-3 text-xs text-mut border-t border-line/60 pt-2 flex flex-wrap gap-4">
+            <span>DOM Characters: <strong>{result.dom_length}</strong></span>
+            <span>Target URL: <code>{url || 'configured health URL'}</code></span>
+          </div>
+        )}
       </Card>
     </div>
   )

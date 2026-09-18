@@ -70,4 +70,14 @@ export const api = {
     req('/api/auth/reset-password', json({ username_or_email, code, new_password, confirm_password: new_password })),
   changePassword: (current_password: string, new_password: string) =>
     req('/api/auth/change-password', json({ current_password, new_password })),
+  runSyntheticProbe: (serviceId: number) =>
+    req<{ ok: boolean; status: string; reason: string; dom_length: number; screenshot_path: string | null }>(
+      `/api/services/${serviceId}/synthetic-probe`,
+      { method: 'POST' }
+    ),
+  triggerDeployWebhook: (serviceId: number) =>
+    req<{ ok: boolean; status_code: number; detail: string }>(
+      `/api/services/${serviceId}/deploy-webhook`,
+      { method: 'POST' }
+    ),
 }

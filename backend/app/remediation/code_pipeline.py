@@ -59,6 +59,12 @@ async def run_client_remediation(incident_id: int, hints: list[dict]) -> None:
         if not incident:
             return
         svc = incident.service
+        try:
+            from app.remediation.workspace_manager import ensure_workspace
+            await ensure_workspace(svc)
+            db.commit()
+        except Exception as ws_err:
+            log.warning(f"workspace ensure in client remediation: {ws_err}")
         repo = _service_dir(svc)
         note = await git_workspace.sync_repo(
             repo, target_branch=(svc.target_branch or svc.deploy_branch or "main"))
@@ -100,7 +106,12 @@ async def run_code_remediation(incident_id: int, file_hint: str, line: int) -> N
             incident_engine.add_event(db, incident.id, "CODEFIX_SKIPPED",
                                       "auto-remediation disabled for this service")
             db.commit()
-            return
+        try:
+            from app.remediation.workspace_manager import ensure_workspace
+            await ensure_workspace(svc)
+            db.commit()
+        except Exception as ws_err:
+            log.warning(f"workspace ensure in code remediation: {ws_err}")
         repo = _service_dir(svc)
         target = _resolve_local(svc, file_hint)
         if not target:
